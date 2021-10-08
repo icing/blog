@@ -44,7 +44,7 @@ But if those checks have a bug, the `Directory` based security settings are the 
 With base security removed, the 2.4.49 version (and only that!) allowed something like:
 
 ```
-curl http://host/img-sys/.%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/etc/passwd
+curl http://host/img-sys/.%2e/%2e%2e/etc/passwd
 ... contents of /etc/passwd
 ```
 
@@ -55,20 +55,19 @@ curl http://host/img-sys/.%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/etc/passwd
 
 Assuming `ServerRoot /path/to/httpd`, what did httpd 2.4.49 do?
 
- - looking for `/img-sys/.%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/etc/passwd`
- - normalize url to: `/img-sys/../../../../../../etc/passwd` (***wrong!***)
-   - should have resulted in `/../../../../../etc/passwd` and failed (above root)!
- - decode for file access: `img-sys/../../../../../etc/passwd`
- - make it an absolute path based on `ServerRoot`
-    * alias/replace `img-sys` by `/opt/images`
-    * prepend `/path/to/httpd` which gives `/path/to/httpd/opt/images/../../../../../etc/passwd`
-    * and normalize gives `/etc/passwd`
+ - looking for `/img-sys/.%2e/%2e%2e/etc/passwd`
+ - normalize url to: `/img-sys/../../etc/passwd` (***wrong!***)
+   * should have resulted in `/../etc/passwd` and failed (above root)!
+ - decode for file access: `/img-sys/../../etc/passwd`
+ - make it a filesystem path
+   * mod_alias replaces `/img-sys/` by `/opt/images` which gives `/opt/images/../../etc/passwd`
+   * and normalizes to `/etc/passwd`
  - is access granted?: yes <- if base security was removed
 
 This was reported by cPanel security team. They verified our fix and we released 2.4.50 and reported CVE-2021-41773.
 
 Absent an `Alias` or `ScriptAlias` for the base path `/img-sys`, Apache httpd would reject
-`/path/to/httpd/htdocs/../../../../../../etc/passwd` because the core URI to path translation mechanism
+`/path/to/httpd/htdocs/../../etc/passwd` because the core URI to path translation mechanism
 rejects anything above the `DocumentRoot` (`/path/to/httpd/htdocs` here), which is not the case of
 mod_alias (this is being addressed for the next httpd version as a second line of defense).
 
@@ -84,25 +83,25 @@ and discovered another exploit. If httpd was configured with something like:
     Require all granted
 </Directory>
 ...
-ScriptAlias /cgi-bin/ /my-cgi-dir
+ScriptAlias /cgi-bin/ /my-cgi-dir/
 ```
 
 You could send a request like:
 
 ```
-curl http://host/cgi-bin/%%32%65%2%65/%%32%65%%32%65/%%32%65%%32%65/bin/sh
+curl http://host/cgi-bin/%%32%65%2%65/bin/sh
 # httpd executes /bin/sh
 ```
 
 What httpd 2.4.50 did here:
 
- - looking for `/cgi-bin/%%32%65%2%65/%%32%65%%32%65/bin/sh`
- - normalize url to: `/cgi-bin/%2E%2E/%2E%2E/bin/sh` (***sorry, still not correct!***)
+ - looking for `/cgi-bin/%%32%65%2%65/bin/sh`
+ - normalize url to: `/cgi-bin/%2E%2E/bin/sh` (***sorry, still not correct!***)
+ - decode for file access: `/cgi-bin/../bin/sh` (***wrong!***)
  - check file path? no (it's a cgi)
- - decode for file access: `/cgi-bin/../../bin/sh` (***wrong!***)
- - make it an absolute path
-   * prepend `/my-cgi-dir` to `/cgi-bin/../../bin/sh`
-   * and normalize gives `/bin/sh`
+ - make it a filesystem path
+   * mod_alias replaces `/cgi-bin/` by `/my-cgi-dir/` which gives `/my-cgi-dir/../bin/sh`
+   * and normalizes to `/bin/sh`
  - is access granted?: yes <- if security defaults were removed
  - give to cgi handler to execute
 
@@ -114,16 +113,15 @@ This vulnerability is reported in [CVE-2021-42013](https://cve.mitre.org/cgi-bin
 
 ## Fix, 2.4.51
 
-What httpd 2.4.51 does now in the example above:
+What httpd 2.4.51 does now in the example above (replacing `%%32` by `%25%32` because the former is now `400 Bad request`):
 
- - looking for `/cgi-bin/%%32%65%2%65/%%32%65%%32%65/bin/sh`
- - normalize url ***fails***, as this is not a correct url -> ***400 Bad Request***
- - *But if it would continue, it would go on  like this*:
+ - looking for `/cgi-bin/%25%32%65%25%32%65/bin/sh`
+ - normalize url to: `/cgi-bin/%2E%2E/bin/sh` (***correct!***)
+ - decode for file access: `/cgi-bin/%2E%2E/bin/sh` (***correct!***)
  - check file path? no (it's a cgi)
- - decode for file access: `/cgi-bin/%2E%2E/%2E%2E/bin/sh` (***correct!***)
- - make it an absolute path
-   * prepend `/my-cgi-dir` to `/cgi-bin/%2E%2E/%2E%2E/bin/sh`
-   * and normalize gives `/my-cgi-dir/cgi-bin/%2E%2E/%2E%2E/bin/sh`
+ - make it a filesystem path
+   * mod_alias replaces `/cgi-bin/` by `/my-cgi-dir/` which gives `/my-cgi-dir/%2E%2E/bin/sh`
+   * and normalizes to `/my-cgi-dir/%2E%2E/bin/sh`
  - is access granted?: yes, it's beneath the cgi dir
  - give to cgi handler to execute, -> not found
 
