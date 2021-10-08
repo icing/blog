@@ -117,7 +117,10 @@ What httpd 2.4.51 does now in the example above:
 
  - looking for `/cgi-bin/%%32%65%2%65/bin/sh`
    * fails as `%%` is invalid as `400 Bad request` (***correct***)
- - encoding `%` as `%25`, so looking for `/cgi-bin/%25%32%65%25%32%65/bin/sh`
+
+If the client changes the url slightly, encoding `%` as `%25`, the server is
+
+ - looking for `/cgi-bin/%25%32%65%25%32%65/bin/sh`
  - normalizes to: `/cgi-bin/%2E%2E/bin/sh` (***correct, decode unreserved characters!***)
  - decode for file access: `/cgi-bin/%2E%2E/bin/sh` (***correct, don't decode unreserved characters twice!***)
  - check file path? no (it's a cgi)
