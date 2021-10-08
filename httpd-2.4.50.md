@@ -49,20 +49,21 @@ curl http://host/img-sys/.%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/etc/passwd
 ```
 
 *iff* that `img-sys` was not a directory in your document root, but something mapped elsewhere, for example
-using `mod_alias`, as in:
+using `mod_alias`'s `Alias` or `ScriptAlas`, as in:
 
 ```
-   Alias img-sys /opt/images
+   Alias /img-sys /opt/images
 ```
 
 What did httpd 2.4.49 do? 
 
  - looking for `/img-sys/.%2e/%2e%2e/%2e%2e/%2e%2e/etc/passwd`
  - normalize url to: `/img-sys/../../../../../etc/passwd` (***wrong!***)
-   - should resulted in `../../../../etc/passwd` and failed!
+   - should have resulted in `/../../../../etc/passwd` and failed (above root)!
  - decode for file access: `img-sys/../../../../etc/passwd`
- - make it an absolute path
-    * prepend `/opt/images/` to `img-sys/../../../../etc/passwd
+ - make it an absolute path based on `ServerRoot`
+    * alias/replace `img-sys` to `/opt/images/../../../../etc/passwd
+    * prepend `/path/to/httpd` gives `/path/to/httpd/opt/images/img-sys/../../../../etc/passwd
     * and normalize gives `/etc/passwd`
  - is access granted?: yes <- if base security was removed
 
