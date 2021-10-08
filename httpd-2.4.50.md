@@ -3,7 +3,7 @@
 With Apache 2.4.50 the team fixed [CVE-2021-41773](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-41773), 
 a critical security flaw that allowed _under certain conditions_ an outside to access files on your server outside of the configured document roots.
 
-This fix was correct for the issue reported, but it did not close the weakness completely, as was discovered soon thereafter by people in the security community. Indeed, the weakness was worse than originally thought. But it also affected way less installations than was communicated in the media.
+This fix was corrected for the issue reported, but it did not close the weakness completely, as was discovered soon thereafter by people in the security community. Indeed, the weakness was worse than originally thought. But it also affected way less installations than was communicated in the media.
 
 This blog explains what the issue really was and why you, most likely, were not affected.
 
