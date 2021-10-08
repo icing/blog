@@ -11,7 +11,7 @@ This blog explains what the issue really was and why you, most likely, were not 
 
 At the core of security inside the server are its mechanisms for _authorization_, meaning what a request from the outside is allowed to access. The most basic is the authorization for `all` which means all requests, regardless of where they come from, what user has maybe authenticated or not or which method they use.
 
-All linux distributions we know of install a Apache httpd with permissions for `all` properly set. For example, in debian, your `apache2.conf` contains:
+Most linux distributions we looked at install a Apache httpd with permissions for `all` properly set. For example, in debian, your `apache2.conf` contains:
 
 ```
 <Directory />
@@ -48,14 +48,21 @@ curl http://host/img-sys/.%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/etc/passwd
 ... contents of /etc/passwd
 ```
 
+*iff* that `img-sys` was not a directory in your document root, but something mapped elsewhere, for example
+using `mod_alias`, as in:
+
+```
+   Alias img-sys /opt/images
+```
+
 What did httpd 2.4.49 do? 
 
- - looking for `/img-sys/%2e%2e/%2e%2e/%2e%2e/%2e%2e/etc/passwd`
+ - looking for `/img-sys/.%2e/%2e%2e/%2e%2e/%2e%2e/etc/passwd`
  - normalize url to: `/img-sys/../../../../../etc/passwd` (***wrong!***)
    - should resulted in `../../../../etc/passwd` and failed!
  - decode for file access: `img-sys/../../../../etc/passwd`
  - make it an absolute path
-    * prepend `/srv/www/htdocs/` to `img-sys/../../../../etc/passwd
+    * prepend `/opt/images/` to `img-sys/../../../../etc/passwd
     * and normalize gives `/etc/passwd`
  - is access granted?: yes <- if base security was removed
 
@@ -107,7 +114,7 @@ What httpd 2.4.51 does now in the example above:
 
  - looking for `/cgi-bin/%%32%65%2%65/%%32%65%%32%65/bin/sh`
  - normalize url fails, as this is not a correct url -> ***400 Bad Request***
- - *But if id did*, it would go on  like this:
+ - *But if it did*, it would go on  like this:
  - check file path? no (it's a cgi)
  - decode for file access: `/cgi-bin/%2E%2E/%2E%2E/bin/sh` (***correct!***)
  - make it an absolute path
@@ -132,7 +139,7 @@ not happen again.
 If you are interested in what this is actually about "url decoding" and path checks a server has
 to do, I'll give a short overview at the end of this post.
 
-## Impact
+## How It Went
 
 We are sorry to not have caught the full implication of the bug in 2.4.49. While our fix was correct, it
 did not close the issue. Maybe with more time spend on it, we would have found it ourselves. But time
@@ -141,32 +148,35 @@ such a discussion is leading us nowhere.
 
 2.4.51 contains only the new fix and no other changes, we hope that makes upgrades to that version easier.
 
+### Security Reporting
 
-## On Security Reporting
+We are very happy that people who discovered the flaws contacted us on our security list and worked
+with us to fix and verify the changes. 
 
-If you find such issues in software, the common practise is that you inform a project about it. For Apache, you mail to `security@apache.org` or `security@httpd.apache.org`. We analyze your issue, develop a patch, give it to you for
-verification, assign a CVE number, publish that in the next release and give you credit for it.
+On the 2.4.49 issue this was Ash Daulton along with the cPanel Security Team. The also stayed very 
+active on testing the 2.4.51 version. The 2.4.50 issues was reported by Juan Escobar from Dreamlab 
+Technologies, Fernando Muñoz from NULL Life CTF Team, and Shungo Kumasaka.
 
-This is what happened here also. But with the publicity the 2.4.49 fix got, some people posted 2.4.50 exploits on twitter.
-We can understand that it is tempting to get a lot of likes and some fame without having to wait for a fix actually
-available.
+We would like to thank these fine people for their help and professionalism.
 
-We do not like this. Not because it is embarrassing, but because it hurts the people using the software. Your
-fame is paid for by all the administrators out there who are not sure if they are affected or not and what they
-can do about it.
+### The Project
 
-Fact: although the Apache Software Foundation is a large community, it does ***not*** pay the developers. Its role
-is to give infrastructure and support to projects. Most people participate on their spare time. Some get
-time for this allocated by their employers. Some get a sponsorship for a specific feature. This
-is a common setup in open source nowadays.
+We had improved our release process the weeks before and were able to ship 2.4.50 a week after reporting. 
+Since the issue fixed was so critical, it got a lot of attention.
 
-We are not as lonely as [the one guy in Nebraska](https://xkcd.com/2347/), but we know how he/she feels.
+We got the report of the second weakness soon afterwards (last Tuesday). We shipped the fix in 2.4.51 
+two days after that with a shortened release vote, as we feared this would not stay unknown for long.
 
-(The sad peak in this was a guy on twitter that got ~500 likes for posting that our server had a weakness ***when
-he changed the code!*** Yeah, whatever.)
+The whole httpd security team was very active to get this done in such a short time. It 
+was quite intense. Many thanks to Yann Ylavic, Rüdiger Pluem, Joe Orton, Eric Covener, Rainer Jung, 
+Giovanni Bechis and Mark J. Cox, the Apache security coordinator.
 
 
-## URL Decoding, what is it and why?
+October 8th 20201,
+Stefan
+
+
+## Appendix: URL Decoding, what is it and why?
 
 URL Decoding, is I named it here, is the *interpretation* of a URL. What resource does the request want to access?
 
