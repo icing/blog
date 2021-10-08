@@ -3,7 +3,7 @@
 With Apache 2.4.50 the team fixed [CVE-2021-41773](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-41773), 
 a critical security flaw that allowed _under certain conditions_ an outside to access files on your server outside of the configured document roots.
 
-This fix was correct for the issue reported, but it did not close the weakness completely, as was discovered soon thereafter by people in the security community. Indeed, the weakness was worse than originally thought. But it also affected way less installations than was communicated in the media.
+This fix was corrected for the issue reported, but it did not close the weakness completely, as was discovered soon thereafter by people in the security community. Indeed, the weakness was worse than originally thought. But it also affected way less installations than was communicated in the media.
 
 This blog explains what the issue really was and why you, most likely, were not affected.
 
@@ -35,7 +35,7 @@ How can the server then deliver any of your website files? Well, `apache2.conf` 
 
 This defines `/var/www` as a place where requests have access and that has preference over the `/` settings for all files underneath (File permissions in the operating system apply in addition to this, of course, the server does not serve requests as `root`.)
 
-Above this `Directory` base security, you can also define `Location` based requirements. These apply to the URLs send to your server, regardless of where they are later mapped to in the file system. And there are additional checks involved for checking that requests stay inside the *document root*  defined for a host.
+Above this `Directory` base security, you can also define `Location` based requirements. These apply to the URLs sent to your server, regardless of where they are later mapped to in the file system. And there are additional checks involved for checking that requests stay inside the *document root*  defined for a host.
 
 But if those checks have a bug, the `Directory` based security settings are the last line of defense.
 
