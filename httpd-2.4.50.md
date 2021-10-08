@@ -113,10 +113,12 @@ This vulnerability is reported in [CVE-2021-42013](https://cve.mitre.org/cgi-bin
 
 ## Fix, 2.4.51
 
-What httpd 2.4.51 does now in the example above (replacing `%%32` by `%25%32` because the former is now `400 Bad request`):
+What httpd 2.4.51 does now in the example above:
 
- - looking for `/cgi-bin/%25%32%65%25%32%65/bin/sh`
- - normalize url to: `/cgi-bin/%2E%2E/bin/sh` (***correct, decode unreserved characters!***)
+ - looking for `/cgi-bin/%%32%65%2%65/bin/sh`
+   * fails as `%%` is invalid as `400 Bad request` (***correct***)
+ - encoding `%` as `%25`, so looking for `/cgi-bin/%25%32%65%25%32%65/bin/sh`
+ - normalizes to: `/cgi-bin/%2E%2E/bin/sh` (***correct, decode unreserved characters!***)
  - decode for file access: `/cgi-bin/%2E%2E/bin/sh` (***correct, don't decode unreserved characters twice!***)
  - check file path? no (it's a cgi)
  - make it a filesystem path
@@ -170,7 +172,7 @@ We got the report of the second weakness soon afterwards (last Tuesday). We ship
 two days after that with a shortened release vote, as we feared this would not stay unknown for long.
 
 The whole httpd security team was very active to get this done in such a short time. It 
-was quite intense. Many thanks to Yann Ylavic, Rüdiger Pluem, Joe Orton, Eric Covener, Rainer Jung, 
+was quite intense. Many thanks to Yann Ylavic, Rüdiger Plüm, Joe Orton, Eric Covener, Rainer Jung, 
 Giovanni Bechis and Mark J. Cox, the Apache security coordinator.
 
 
