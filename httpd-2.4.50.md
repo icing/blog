@@ -48,15 +48,12 @@ curl http://host/img-sys/.%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/etc/passwd
 ... contents of /etc/passwd
 ```
 
-*iff* that `img-sys` was not a directory in your document root, but something mapped elsewhere, for example
-using `mod_alias`'s `Alias` or `ScriptAlas`, as in:
-
+*iff* that `img-sys` is mapped using `mod_alias`'s `Alias` or `ScriptAlas`, as in:
 ```
-   Alias /img-sys /opt/images
+   Alias /img-sys/ /opt/images/
 ```
 
-Assuming `ServerRoot /path/to/httpd`,
-what did httpd 2.4.49 do? 
+Assuming `ServerRoot /path/to/httpd`, what did httpd 2.4.49 do?
 
  - looking for `/img-sys/.%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/etc/passwd`
  - normalize url to: `/img-sys/../../../../../../etc/passwd` (***wrong!***)
@@ -69,6 +66,12 @@ what did httpd 2.4.49 do?
  - is access granted?: yes <- if base security was removed
 
 This was reported by cPanel security team. They verified our fix and we released 2.4.50 and reported CVE-2021-41773.
+
+Absent an `Alias` or `ScriptAlias` for the base path `/img-sys`, Apache httpd would reject
+`/path/to/httpd/htdocs/../../../../../../etc/passwd` because the core URI to path translation mechanism
+rejects anything above the `DocumentRoot` (`/path/to/httpd/htdocs` here), which is not the case of
+mod_alias (this is being addressed for the next httpd version as a second line of defense).
+
 
 ## Affection, 2.4.50
 
