@@ -44,7 +44,7 @@ But if those checks have a bug, the `Directory` based security settings are the 
 With base security removed, the 2.4.49 version (and only that!) allowed something like:
 
 ```
-curl http://host/img-sys/.%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/etc/passwd
+curl http://host/img-sys/.%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/etc/passwd
 ... contents of /etc/passwd
 ```
 
@@ -55,15 +55,16 @@ using `mod_alias`'s `Alias` or `ScriptAlas`, as in:
    Alias /img-sys /opt/images
 ```
 
-What did httpd 2.4.49 do? 
+Assuming `ServerRoot /path/to/httpd`,
+what did httpd 2.4.49 do? 
 
- - looking for `/img-sys/.%2e/%2e%2e/%2e%2e/%2e%2e/etc/passwd`
- - normalize url to: `/img-sys/../../../../../etc/passwd` (***wrong!***)
-   - should have resulted in `/../../../../etc/passwd` and failed (above root)!
- - decode for file access: `img-sys/../../../../etc/passwd`
+ - looking for `/img-sys/.%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/etc/passwd`
+ - normalize url to: `/img-sys/../../../../../../etc/passwd` (***wrong!***)
+   - should have resulted in `/../../../../../etc/passwd` and failed (above root)!
+ - decode for file access: `img-sys/../../../../../etc/passwd`
  - make it an absolute path based on `ServerRoot`
-    * alias/replace `img-sys` to `/opt/images/../../../../etc/passwd
-    * prepend `/path/to/httpd` gives `/path/to/httpd/opt/images/img-sys/../../../../etc/passwd
+    * alias/replace `img-sys` by `/opt/images`
+    * prepend `/path/to/httpd` which gives `/path/to/httpd/opt/images/../../../../../etc/passwd`
     * and normalize gives `/etc/passwd`
  - is access granted?: yes <- if base security was removed
 
