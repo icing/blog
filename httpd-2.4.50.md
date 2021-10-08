@@ -116,8 +116,8 @@ This vulnerability is reported in [CVE-2021-42013](https://cve.mitre.org/cgi-bin
 What httpd 2.4.51 does now in the example above (replacing `%%32` by `%25%32` because the former is now `400 Bad request`):
 
  - looking for `/cgi-bin/%25%32%65%25%32%65/bin/sh`
- - normalize url to: `/cgi-bin/%2E%2E/bin/sh` (***correct!***)
- - decode for file access: `/cgi-bin/%2E%2E/bin/sh` (***correct!***)
+ - normalize url to: `/cgi-bin/%2E%2E/bin/sh` (***correct, normalization includes decoding unreserved characters!***)
+ - decode for file access: `/cgi-bin/%2E%2E/bin/sh` (***correct, don't decode unreserved characters twice!***)
  - check file path? no (it's a cgi)
  - make it a filesystem path
    * mod_alias replaces `/cgi-bin/` by `/my-cgi-dir/` which gives `/my-cgi-dir/%2E%2E/bin/sh`
