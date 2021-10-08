@@ -162,7 +162,7 @@ with us to fix and verify the changes.
 
 On the 2.4.49 issue this was Ash Daulton along with the cPanel Security Team. They also stayed very 
 active on testing the 2.4.51 version. The 2.4.50 issues was reported by Juan Escobar from Dreamlab 
-Technologies, Fernando Muñoz from NULL Life CTF Team, and Shungo Kumasaka.
+Technologies, Fernando Muñoz from NULL Life CTF Team, Shungo Kumasaka and Nattapon Jongcharoen..
 
 We would like to thank these fine people for their help and professionalism.
 
