@@ -97,8 +97,7 @@ What httpd 2.4.50 did here:
  - decode for file access: `/cgi-bin/../../bin/sh` (***wrong!***)
  - make it an absolute path
    * prepend `/my-cgi-dir` to `/cgi-bin/../../bin/sh`
-   * and normalize gives `/etc/passwd`
- - normalized to: `/bin/sh`
+   * and normalize gives `/bin/sh`
  - is access granted?: yes <- if security defaults were removed
  - give to cgi handler to execute
 
