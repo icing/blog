@@ -96,7 +96,7 @@ curl http://host/cgi-bin/%%32%65%2%65/bin/sh
 What httpd 2.4.50 did here:
 
  - looking for `/cgi-bin/%%32%65%2%65/bin/sh`
- - normalize url to: `/cgi-bin/%2E%2E/bin/sh` (***sorry, still not correct!***)
+ - normalize url to: `/cgi-bin/%2e%2e/bin/sh` (***sorry, still not correct!***)
  - decode for file access: `/cgi-bin/../bin/sh` (***wrong!***)
  - check file path? no (it's a cgi)
  - make it a filesystem path
@@ -121,12 +121,12 @@ What httpd 2.4.51 does now in the example above:
 If the client changes the url slightly, encoding `%` as `%25`, the server is
 
  - looking for `/cgi-bin/%25%32%65%25%32%65/bin/sh`
- - normalizes to: `/cgi-bin/%2E%2E/bin/sh` (***correct, decode unreserved characters!***)
- - decode for file access: `/cgi-bin/%2E%2E/bin/sh` (***correct, don't decode unreserved characters twice!***)
+ - normalizes to: `/cgi-bin/%2e%2e/bin/sh` (***correct, decode unreserved characters!***)
+ - decode for file access: `/cgi-bin/%2e%2e/bin/sh` (***correct, don't decode unreserved characters twice!***)
  - check file path? no (it's a cgi)
  - make it a filesystem path
-   * mod_alias replaces `/cgi-bin/` by `/my-cgi-dir/` which gives `/my-cgi-dir/%2E%2E/bin/sh`
-   * and normalizes to `/my-cgi-dir/%2E%2E/bin/sh`
+   * mod_alias replaces `/cgi-bin/` by `/my-cgi-dir/` which gives `/my-cgi-dir/%2e%2e/bin/sh`
+   * and normalizes to `/my-cgi-dir/%2e%2e/bin/sh`
  - is access granted?: yes, it's beneath the cgi dir
  - give to cgi handler to execute, -> not found
 
