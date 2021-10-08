@@ -35,7 +35,7 @@ How can the server then deliver any of your website files? Well, `apache2.conf` 
 
 This defines `/var/www` as a place where requests have access and that has preference over the `/` settings for all files underneath (File permissions in the operating system apply in addition to this, of course, the server does not serve requests as `root`.)
 
-Above this `Directory` base security, you can also define `Location` based requirements. This apply to the URLs send to your server, irregardless of where they are later mapped to in the file system. And there are additional checks involved for checking that requests stay inside the *document root*  defined for a host.
+Above this `Directory` base security, you can also define `Location` based requirements. This apply to the URLs send to your server, regardless of where they are later mapped to in the file system. And there are additional checks involved for checking that requests stay inside the *document root*  defined for a host.
 
 But if those checks have a bug, the `Directory` based security settings are the last line of defense.
 
