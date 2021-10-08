@@ -112,8 +112,8 @@ This vulnerability is reported in [CVE-2021-42013](https://cve.mitre.org/cgi-bin
 What httpd 2.4.51 does now in the example above:
 
  - looking for `/cgi-bin/%%32%65%2%65/%%32%65%%32%65/bin/sh`
- - normalize url fails, as this is not a correct url -> ***400 Bad Request***
- - *But if it did*, it would go on  like this:
+ - normalize url ***fails***, as this is not a correct url -> ***400 Bad Request***
+ - *But if it would continue, it would go on  like this*:
  - check file path? no (it's a cgi)
  - decode for file access: `/cgi-bin/%2E%2E/%2E%2E/bin/sh` (***correct!***)
  - make it an absolute path
