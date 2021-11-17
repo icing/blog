@@ -13,7 +13,7 @@ development, so I want this to work on the local machine without any other infra
 There are three things to do:
 
 1. Create certificates using your own 'CA'.
-2. Setup you Apache server
+2. Setup your Apache server
 3. Invoke `curl` with the necessary arguments
 
 ![](images/stooges.png)
