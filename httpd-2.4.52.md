@@ -1,6 +1,6 @@
 # Apache httpd 2.4.52
 
-On 2022-12-20 the project released version 2.4.52 of Apache httpd. 2 CVEs have been fixed, several bugs have been addressed. The server has been tested with OpenSSL 3.0.1. A new, experimental for Rust based TLS and ACME EAB support has been added.
+On 2021-12-20 the project released version 2.4.52 of Apache httpd. 2 CVEs have been fixed, several bugs have been addressed. The server has been tested with OpenSSL 3.0.1. A new, experimental for Rust based TLS and ACME EAB support has been added.
 
 In detail:
 
