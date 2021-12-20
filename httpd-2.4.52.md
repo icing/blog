@@ -42,3 +42,8 @@ The ACME standard allows a CA to require special information by clients to conne
 
 This work has been supported by [Sectigo](https://sectigo.com) and information on the integration of Apache ACME with their Certificate Manager is expected early next year.
 
+# Not Included
+
+Well, I wanted to deliver improvements in the HTTP/2 implementation. Those are in trunk and released on [mod_h2's github repository](https://github.com/icing/mod_h2), but an issue was detected that led to an infinite loop, hogging cpu. This has been fixed in v2.0.2, but some more testing in a production environment seems wise.
+
+Luckily, there are people like @codeyy and @Adam7288 who help with that. Invaluable!
