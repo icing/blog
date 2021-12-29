@@ -2,6 +2,7 @@
 
 Short things to share.
 
+ * [Social Java](social_java.md)
  * [Social C](social_c.md)
  * [Apache httpd 2.4.52 release](httpd-2.4.52.md)
  * [2022 Resolution: Open Source](2022_resolution.md)
