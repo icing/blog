@@ -2,6 +2,7 @@
 
 Short things to share.
 
+ * [Social Swift? On APIs and ABIs](social_swift.md)
  * [Social Java](social_java.md)
  * [Social C](social_c.md)
  * [Apache httpd 2.4.52 release](httpd-2.4.52.md)
