@@ -2,7 +2,7 @@
 
 As feedback to
 my earlier posts about [Social C](social_c.md) and [Social Java](social_java.md) I got a link from
-[Cory Benfield](@lukasaoz) to an essay [How Swift Achieved Dynamic Linking Where Rust Couldn't](https://gankra.github.io/blah/swift-abi/) by Aria Beingessner. This proved *very* interesting for several reasons which I try to layout below.
+[Cory Benfield](@lukasa) to an essay [How Swift Achieved Dynamic Linking Where Rust Couldn't](https://gankra.github.io/blah/swift-abi/) by Aria Beingessner. This proved *very* interesting for several reasons which I try to layout below.
 
 ## API stability, ABI stability, what are those, really?
 
