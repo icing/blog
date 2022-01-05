@@ -62,11 +62,11 @@ To make compiled components work with each other, the ABI needs to include defin
 4. Where returned Types are stored and can be picked up by the caller.
 5. What kind of context information needs to be saved/restored/is free to mess with between caller and callee.
 
-The exact details vary from platform to platform and are embedded into the compilers, linkers, debuggers and all sorts of runtime infrastructure. 
+The exact details vary from platform to platform and are embedded into the compilers, linkers, debuggers and all sorts of runtime infrastructure. At the base is the format defining linkable components, so dynamic linkers can stitch them together at runtime. 
 
-On linux and bsd systems [ELF](https://en.wikipedia.org/wiki/Executable_and_Linkable_Format) is the most common ABI standard used. ELF has also been adopted in other operating systems and is used on devices such as Sony Playstations, Nintendos and Android mobile phones.
+On linux and bsd systems [ELF](https://en.wikipedia.org/wiki/Executable_and_Linkable_Format) is the most common definition for the objects their ABI is based on. ELF has also been adopted in other operating systems and is used on devices such as Sony Playstations, Nintendos and Android mobile phones.
 
-macOS and its siblings have their own `dyld` as part of the underlying [Darwin](https://en.wikipedia.org/wiki/Darwin_(operating_system)) OS. That has its roots in the BSD and Mach projects and began in 1989 as `NextSTEP`. (Linux first official release was 1991). ELF was first standardized in 1997 as ["System V Application Binary Interface"](http://www.sco.com/developers/devspecs/gabi41.pdf) and over the years extended for different architectures.
+macOS and its siblings have their `Mach-O` as their equivalent to ELF in the [Darwin](https://en.wikipedia.org/wiki/Darwin_(operating_system)) OS. That has its roots in the BSD and Mach projects and began in 1989 as `NextSTEP`. (Linux first official release was 1991). ELF was first standardized in 1997 as ["System V Application Binary Interface"](http://www.sco.com/developers/devspecs/gabi41.pdf) and over the years extended for different architectures.
 
 Quite a success story and decades of major development under the hood.
 
@@ -125,4 +125,4 @@ Sadly, there is no initiative to bring this ABI onto other platforms. While the 
 
 While I look at dynamic linking from a Social aspect, e.g. how we all can work productive together, the Swift ABI shows that there is real business interest in this as well. It is not obsolete in the area of cloud stacks and docker images we live in.
 
-Is there someone working on a similar thing for the *nix world? I don't know. Who would that be? I don't know. But a am sure that I would like to use it.
+Is there someone working on a similar thing for the *nix world? I don't know. Who would that be? I don't know. But I am sure that I would like to use it.
