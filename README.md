@@ -2,6 +2,7 @@
 
 Short things to share.
 
+ * [Let's Encrypt trouble (TLS-ALPN-01)](lets-encrypt-trouble.md)
  * [Social Swift? On APIs and ABIs](social_swift.md)
  * [Social Java](social_java.md)
  * [Social C](social_c.md)
