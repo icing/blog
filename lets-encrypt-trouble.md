@@ -32,9 +32,11 @@ always be complete. Having received no email seems not a safe indicator.
 
 Luckily, Apache ACME persists everything in the file system, including a log of the
 renewals. This is the `MDStoreDir` which is by default the directory `md` in your
-server root. On many systems this is `/etc/apache2/md`. Just open a shell there and:
+server root. On many systems this is `/etc/apache2/md`. If you have a recent Apache install,
+just open a shell there and:
 
 ```
+# Apache httpd 2.4.48+
 md> fgrep -r 'message-challenge-setup' domains
 ...
 ./domains/mydomain1.org/job.json:        "type": "message-challenge-setup:http-01:mydomain1.org"
@@ -47,6 +49,17 @@ and you can see which ACME challenge type was used to verify your domains with L
 In the output above you can see that `mydomain1.org` was verified by the `http-01` method
 and `mydomain2.com` used the problematic `tls-alpn-01`. This means that your certificate
 for `mydomain1.org` is fine and you should renew the one for `mydomain2.com`.
+
+In older versions, logging was a bit different and you might use:
+
+```
+# Apache httpd 2.4.46 and maybe older
+md> fgrep -r 'tls-alpn-01' domains
+...
+./domains/mydomain2.com/job.json:        "detail": "Setting up challenge 'tls-alpn-01' for domain mydomain2.com"
+...
+```
+
 
 ## How to Renew
 
