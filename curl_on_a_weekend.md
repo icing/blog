@@ -98,7 +98,7 @@ The aspect that gets me worried is that curlconvert provides **code**. And that 
 
 I do not want to speculate what goals the authors of curlconverter want to achieve. If they read this, I hope they can see the dangers they give into the hands of people. I wish they'd add checks on the parts the tool does not understand or is unable to convert correctly.
 
-Then it would really give knowledge to users
+Then it could really give knowledge to users: "we cannot convert this command to language X, since X does not support Y and Z!"
 
 
 
