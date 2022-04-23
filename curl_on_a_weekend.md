@@ -53,10 +53,10 @@ That must be it. Let's try that! Opening firefox and copying `as Curl Address` i
 ```
 curl 'https://eissing.org/' -H 'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; 
 rv:97.0) Gecko/20100101 Firefox/97.0' -H 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,
-image/avif,image/webp,*/*;q=0.8' -H 'Accept-Language: de,en-US;q=0.7,en;q=0.3' -H 'Accept-Encoding: gzip, deflate, br'
- -H 'Connection: keep-alive' -H 'Upgrade-Insecure-Requests: 1' 
- -H 'Sec-Fetch-Dest: document' -H 'Sec-Fetch-Mode: navigate' -H 'Sec-Fetch-Site: none' 
- -H 'Sec-Fetch-User: ?1' -H 'DNT: 1' -H 'If-Modified-Since: Thu, 09 Dec 2021 11:39:19 GMT' 
+image/avif,image/webp,*/*;q=0.8' -H 'Accept-Language: de,en-US;q=0.7,en;q=0.3' -H 'Accept-Encoding: gzip, deflate, br' \
+ -H 'Connection: keep-alive' -H 'Upgrade-Insecure-Requests: 1' \
+ -H 'Sec-Fetch-Dest: document' -H 'Sec-Fetch-Mode: navigate' -H 'Sec-Fetch-Site: none' \
+ -H 'Sec-Fetch-User: ?1' -H 'DNT: 1' -H 'If-Modified-Since: Thu, 09 Dec 2021 11:39:19 GMT' \
  -H 'If-None-Match: "82a-5d2b50e9347c0-gzip"' -H 'Cache-Control: max-age=0' -H 'TE: trailers'
 
 --- python --->
