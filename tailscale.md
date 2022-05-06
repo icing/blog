@@ -7,7 +7,9 @@ I gave this a try (it works nicely and the "zero config" is indeed almost zero) 
 This blog gives a summary of the Apache tailscale integration I did so far.
 
 
-![Photo by [Tim Mowrer, flickr](https://flickr.com/photos/mekin/281791343)](images/tailchase.png)
+!["theme pic"](images/tailchase.png "Photo by Tim Mowrer, flickr")
+Photo by [Tim Mowrer, flickr](https://flickr.com/photos/mekin/281791343)
+
 ## My Own Tailnet
 
 I installed tailnet on my phone, home machine and a virtual private server I rent on a German hosting provider. Let's call these machines `fone`, `home` and `vps`.
