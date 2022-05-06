@@ -14,7 +14,7 @@ Photo by [Tim Mowrer, flickr](https://flickr.com/photos/mekin/281791343)
 
 I installed tailnet on my phone, home machine and a virtual private server I rent on a German hosting provider. Let's call these machines `fone`, `home` and `vps`.
 
-With tailscale enabled, I can ping all machines from any one of them. If I switch WLAN off one `fone`, it remains reachable. Also, my `home` machine is reachable without any fiddling on my router. According to tailscale, connections are done peer-to-peer in almost all cases with some backup relay in case you reach a really obscure part of the internet. tailscale has [excellent documentation](https://tailscale.com/blog/how-nat-traversal-works/) on how this all works. And their code is open.
+With tailscale enabled, I can ping all machines from any one of them. If I switch WLAN off one `fone`, it remains reachable. Also, my `home` machine is reachable without any fiddling on my router. According to tailscale, connections are done peer-to-peer in almost all cases with some backup relay in case you reach a really obscure part of the internet. tailscale has [excellent documentation](https://tailscale.com/blog/how-nat-traversal-works/) on how this all works. And their code is open (mostly, see about `headscale` at the end).
 
 There are some features that you might want to enable on your tailnet:
 
