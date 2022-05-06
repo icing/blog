@@ -2,6 +2,7 @@
 
 Short things to share.
 
+ * [tailscale](tailscale.md)
  * [Vulnerabilities Blabbing](vulnerabilities_blabbing.md)
  * [Curl on a Weekend, the Latest Addition](curl_on_a_weekend.md)
  * [Let's Encrypt trouble (TLS-ALPN-01)](lets-encrypt-trouble.md)
