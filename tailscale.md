@@ -88,6 +88,8 @@ While the certificate provisioning will be part of the next Apache release, the 
 
 ## Conclusion
 
-I like the ease of use of tailnet and it is an interesting space to explore. For 'internal' hosting of services that you only want to use yourself or that you'd like to share in a selected group of friends, it
+I like the ease of use of tailnet and it is an interesting space to explore. Having internal links that are treated as secure in browser and curl use is really nice. Adding auth makes local password management or LDAP servers unnecessary for many applications. Giving better security and usability at the same time.
+
+Of course, this is based on a product by a commercial company. However, the [headscale](https://github.com/juanfont/headscale) project is aiming to provide the same in a all-is-open-source way. 
 
 
