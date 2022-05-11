@@ -2,6 +2,7 @@
 
 Short things to share.
 
+ * [More ACME](more_acme.md)
  * [tailscale](tailscale.md)
  * [Vulnerabilities Blabbing](vulnerabilities_blabbing.md)
  * [Curl on a Weekend, the Latest Addition](curl_on_a_weekend.md)
