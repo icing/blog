@@ -16,6 +16,8 @@ they should renew a certificate. Very nice, since ACME clients check with the CA
 However this does not help clients. For them, OCSP is the only real alternative and that
 has been not so successful. For various reasons covered in various articles on the web.
 
+!["theme pic"](images/double-decker.png)
+
 ## Shorter, Faster
 
 As an alternative to OCSP it has been proposed to just reduce the certificate lifetimes. If a certificate
