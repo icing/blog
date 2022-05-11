@@ -50,7 +50,7 @@ for some time, if goes back to Let's Encrypt etc. etc.
 
 You may configure how many attempts are made before the renewal falls over to another CA. The
 defaults should make that about half a day of attempts. It is not exact since Apache ACME also
-jiggles retry delays +-50% all the time.
+jitters retry delays +-50% all the time.
 
 If I remember my math correctly, this means if a CA had a 1% failure rate, 2 CAs would
 have a 0.01% probability of both failing.
