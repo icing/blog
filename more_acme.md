@@ -37,7 +37,7 @@ percentage of customers negatively (my reading of this). If certificate lifetime
 
 ## More Dices
 
-The likelihood of throwing only 1s (in D&D a certain miss) goes down rapidly if you add dices. In
+The likelihood of throwing only 1s goes down rapidly if you add dices. In
 the recent Apache ACME (mod_md v.2.4.16), you may therefore configure two or more CAs for your
 certificates.
 
