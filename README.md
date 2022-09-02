@@ -2,6 +2,7 @@
 
 Short things to share.
 
+* [Not a Machine](not_a_machine.md) 
 * [Apache httpd 2.4.54 release](httpd-2.4.54.md) 
 * [More ACME](more_acme.md)
 * [tailscale](tailscale.md)
