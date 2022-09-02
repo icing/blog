@@ -5,6 +5,8 @@ the speed of my work and I took it as such (compliments are nice!). But it someh
 in my head and now it wants to get out. It's Friday and I am winding down for the weekend, so
 I thought I'd give it a shot.
 
+!["theme pic"](images/metropolis.png)
+
 ## Machines
 
 A machine is, generally speaking, something made for a *purpose*. It is a *good* machine if
