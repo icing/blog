@@ -2,6 +2,7 @@
 
 Short things to share.
 
+* [Gotos](gotos.md) 
 * [Choices](choices.md) 
 * [Not a Machine](not_a_machine.md) 
 * [Apache httpd 2.4.54 release](httpd-2.4.54.md) 
