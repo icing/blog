@@ -146,5 +146,3 @@ in such code.
 
 I hope this makes you understand some of the weird requirements that server implementors have.
 
-Cheers,
-Stefan
