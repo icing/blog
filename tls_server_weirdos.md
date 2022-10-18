@@ -1,6 +1,6 @@
 # TLS Server Weirdos
 
-TLS servers are weird. There are not many people who work on them, so few people think about the challenges. Notably, I had discussion over the years with *designers of TLS stacks* that did not understand. Instead of explaining it again and again, I decided to write this blog. Just to drop a link next time.
+TLS servers are weird. There are not many people who work on them, so few people think about the challenges. Notably, I had discussion over the years with *designers of TLS stacks* that did not understand the needs. Instead of explaining it again and again, I decided to write this blog. Just to drop a link next time.
 
 ### Clients have it easy
 
@@ -134,9 +134,9 @@ With QUIC separate sets of SNI and ALPN configuration become the norm. It is hig
 
 As the separate SNI/ALPN callbacks proved to be a bit weak and made things complicated, OpenSSL in version 1.1.1 added a new callback, the `client_hello_callback`. This one is invoked *after* the complete ClientHello has been parsed, but *before* the TLS libraries really starts the handshake processing.
 
-This allows that callback to inspect *all* values the client sent and configure *everything* in the `ssl` just right for the subsequent processing. This gives a stable API that does not need to change when new TLS extensions are added and of interest to a server. Not all TLS libraries support this callback yet.
+This allows that callback to inspect *all* values the client sent and configure *everything* in the `ssl` just right for the subsequent processing. This gives a stable API that does not need to change when new TLS extensions are added and are of interest to a server. Not all TLS libraries support this callback yet.
 
-In the Rust world, the [rustls](https://github.com/rustls/rustls) crate broke its API to accommodate for this (among probably other reasons). With version 0.20, there is an `Acceptor` that reads the first data from a client and produces a `ClientHello` struct that exposes *some* values like SNI and ALPN. So a server can decide which `ServerConfig` (the ctx) it wants to use for the `ServerConnection` (the ssl).
+In the Rust world, the [rustls](https://github.com/rustls/rustls) crate **broke** its API to accommodate for this (among probably other reasons). With version 0.20, there is an `Acceptor` that reads the first data from a client and produces a `ClientHello` struct that exposes *some* values like SNI and ALPN. So a server can decide which `ServerConfig` (the ctx) it wants to use for the `ServerConnection` (the ssl).
 
 ## Summary
 
