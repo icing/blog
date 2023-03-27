@@ -2,6 +2,7 @@
 
 Short things to share.
 
+* [curl 2023-03-27](curl-2023-03-27.md)
 * [curl handshake](curl-handshake.md)
 * [curl 2023-02-03](curl-2023-02-03.md)
 * [curl 2023-01-20](curl-2023-01-20.md)
