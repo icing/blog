@@ -33,7 +33,7 @@ Because there can be too many workers, as shown in the following graph:
 
 This measures performance in requests/second for 500k HTTP/2 requests over 48 connections, varying the amount of H2Workers configured in the server. Each connection sends 50 requests in parallel.
 
-Notably, in this use case, the performance starts to drop with more than 100 H2Workers. In those use case, there are always ~2400 requests in the server ready to be processed. As you see, it is twice as fast to process these with 100 workers than with 1000! (I'll say more to the difference between the dark and light green bars below)
+Notably, in this use case, the performance starts to drop with more than 100 H2Workers. In those use case, there are always ~2400 requests in the server ready to be processed. We have 4 server processes, so on average ~600 requests in a process. As you see, it is twice as fast to process these with 50 workers than with 1000! (I'll say more to the difference between the dark and light green bars below)
 
 Why does the performance drop? With 1000 threads, rapidly switching between each other, the CPU caches become less efficient. The current thread needs memory that has been purged from the cache by previous threads and needs to be retrieved again. And again. The CPU stalls.
 
