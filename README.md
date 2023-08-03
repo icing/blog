@@ -2,7 +2,7 @@
 
 Short things to share.
 
-* [Apache HTTP/2 Workers](h2-workers-extreme.md)
+* [Apache HTTP/2 Workers (SSE Version)](h2-workers-extreme.md)
 * [ACME Security](acme_security.md)
 * [curl 2023-03-27](curl-2023-03-27.md)
 * [curl handshake](curl-handshake.md)
