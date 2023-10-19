@@ -2,6 +2,7 @@
 
 Short things to share.
 
+* [Apache httpd 2.4.58](httpd-2.4.58.md) 
 * [HTTP/2 Rapid Reset and Apache](h2-rapid-reset.md)
 * [Apache HTTP/2 Workers (SSE Version)](h2-workers-extreme.md)
 * [ACME Security](acme_security.md)
