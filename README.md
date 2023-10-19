@@ -2,6 +2,7 @@
 
 Short things to share.
 
+* [HTTP/2 Rapid Reset and Apache](h2-rapid-reset.md)
 * [Apache HTTP/2 Workers (SSE Version)](h2-workers-extreme.md)
 * [ACME Security](acme_security.md)
 * [curl 2023-03-27](curl-2023-03-27.md)
