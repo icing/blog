@@ -44,7 +44,7 @@ We see roughly identical performance for `ngtcp2` and `quiche`. `OpenSSL` is a b
 
 ### GET a URL, 50 times, vary parallelism
 
-Again, I ran:
+I ran:
 
 ```
 > python3 tests/http/scorecard.py h3 -r
@@ -58,7 +58,7 @@ We again see `ngtcp2` and `quiche` head-to-head with `OpenSSL` falling behind. W
 
 ### GET a URL, 50 times, 50 parallel, different sizes
 
-Again, I ran:
+As in the first measurement, I ran:
 
 ```
 curl> python3 tests/http/scorecard.py -d h3 --download-count=50 --download=10kb,100kb,1mb,10mb
