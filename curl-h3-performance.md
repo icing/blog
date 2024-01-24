@@ -22,7 +22,7 @@ Core(s) per socket:  4
 
 It has 16GB of DDR3 RAM. It's old. But with 4 real cpu cores, it can run curl tests nicely, since curl is single-threaded, leaving 3 cores available to the server.
 
-As the server to test with I choose [Caddy](https://caddyserver.com). They say it is "THE ULTIMATE SERVER" on their website. It supports all HTTP versions, including HTTP/3. Perfect, let's go.
+As the server to test with I chose [Caddy](https://caddyserver.com). They say it is "THE ULTIMATE SERVER" on their website. It supports all HTTP versions, including HTTP/3. Perfect, let's go.
 
 ### curl's scorecard.py
 
