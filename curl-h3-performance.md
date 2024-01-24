@@ -70,9 +70,9 @@ which also does the GETs in parallel. That means curl will do 50 transfers at th
 
 Here, we see a combination of the previous two measurements. We do only 50 transfers in total, but all parallel. `ngtcp2` and `quiche` scale up much better than `OpenSSL`.
 
-### The Gang
+### The HTTPS Gang
 
-To give you some perspective on the numbers, the graph below shows also the performance using HTTP/1.1 and HTTP/2. All on the same machine, of course.
+To give you some perspective on the numbers, the graph below shows also the performance using HTTP/1.1 and HTTP/2. All on the same machine, of course, and all using `https:` to make the numbers comparable.
 
 ![H3+H2, Parallel GETs, Perspective](images/curl-h3-perf-4.png)
 
