@@ -53,11 +53,11 @@ Eventually, all containers are taken off the train this way. But quite a bit of 
 
 #### curl 7.88.1
 
-We modified the unloaders that they could - often, but not always - place a "wrong" container at the side of the track and continue. There was limited room for those. Too many "wrong" ones and it would block as before. But when the colors matched mostly, this was way faster than before.
+We modified the unloaders that they could - often, but not always - place a "wrong" container at the side of the track and continue. There was limited room for those. Too many "wrong" ones and it would block as before. But when the colors matched mostly, this was way faster than before (way faster for Apache which sends more containers of same color in a row than Caddy does).
 
 #### curl 8.1.1
 
-Placing containers at the side of the track was not a very secure place. so to say. In this version we implemented special, safe places for them, "Receive Buffers", able to hold many containers potentially. They would grow and shrink as needed. This introduced a little overhead when the order of the containers was fortunate, but gave improvements when it was not. (The Apache throughput went down a bit, Caddy improved.)
+Placing containers at the side of the track was not a very secure place. In this version we implemented special, safe places for them, "Receive Buffers", able to hold many containers potentially. They would grow and shrink as needed. This introduced a little overhead when the order of the containers was fortunate, but gave improvements when it was not. (The Apache throughput went down a bit, Caddy improved.)
 
 #### curl 8.2.0 - 8.6.0
 
