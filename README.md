@@ -2,6 +2,7 @@
 
 Short things to share.
 
+* [curl HTTP/2 Performance Evolution](curl-h2-perf-evolution.md)
 * [curl HTTP/3 Performance](curl-h3-performance.md)
 * [Certificates Forever](certificates-forever.md) 
 * [Apache httpd 2.4.58](httpd-2.4.58.md) 
