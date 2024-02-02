@@ -75,6 +75,6 @@ This sounds quite easy and a logical thing to do. But it required heavy reshuffl
 
 Even for an "old" protocol like HTTP/2 there are still things to improve. We hope the changes survive meeting the real world in curl version 8.7.0 and make parallel transfers better in your daily use.
 
-We plan to incorporate the same improvements into out HTTP/3 backends. They operate quite the same, the train looks just a little different and floats in the air. Containers are way smaller, but there are thousands of them...
+We plan to incorporate the same improvements into our HTTP/3 backends. They operate quite the same, the train looks just a little different and floats in the air. Containers are way smaller, but there are thousands of them...
 
 It's what we do.😌
