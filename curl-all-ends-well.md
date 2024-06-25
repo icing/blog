@@ -15,7 +15,7 @@ For most transfers curl establishes a TCP connection to a server (I disregard UD
 
 So, we just close the socket? Well, *sometimes* that is the right thing to do. 
 
-When an error occurs, when the transfer cannot be completed, we we just close. However, when everything went well, we want to *gracefully shut down*. What is the difference?
+When an error occurs, when the transfer cannot be completed, we just close. However, when everything went well, we want to *gracefully shut down*. What is the difference?
 
 ![Ending a Connection](images/the-end.jpg)
 
