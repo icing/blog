@@ -13,9 +13,7 @@ For almost all transfers curl establishes a connection to a server. At some time
 - the maximum number of connections kept for reuse is being exceeded
 - the `libcurl` application wants to terminate
 
-So, we just close the socket? Well, *sometimes* that is the right thing to do. 
-
-When an error occurs, when the transfer cannot be completed, we just close. However, when everything went well, we want to *gracefully shut down*. What is the difference?
+So, we just close the socket? Well, *sometimes* that is the right thing to do. When an error occurs, when the transfer cannot be completed, we just close. However, when everything went well, we want to *gracefully shut down*. What is the difference?
 
 ![Ending a Connection](images/the-end.jpg)
 
@@ -36,6 +34,16 @@ Commonly nowadays, the connection might involve TLS. So, how do we shut that dow
 Why does TLS end connections this way? To prevent anyone from disrupting your communication without you noticing. This is highly relevant for **FTPS** transfers, for example. When you upload a file to an FTPS server like `vsftpd`, it *requires* the close notify. Without it, the upload is rejected. Also in HTTP/1.0 this can be useful. Modern `https:` versions have other means to assure a transfer is complete, however.
 
 So, when curl *aborts* a transfer, it MUST NOT do a TLS shutdown. Or the other side may think it was completed successfully.
+
+#### Shutting down QUIC
+
+When a QUIC socket, which is UDP, is closed, there is nothing being sent to the other side and everything the server sends goes into the void. This is not nice for servers, since they want to handle many connections and getting rid of closed ones frees space and cpu. On the other hand, they *need* to be able to cope, because clients may also crash or simply disappear from the network.
+
+There is a graceful shutdown defined in the QUIC RFC which exchanges mutual close packets and acknowledgements (like a TCP **FIN**). This is supported in the OpenSSL QUIC stack and curl uses it from 8.9.0 on. 
+
+Both `ngtcp2` and `quiche` only implement a best-effort shutdown (so far). This means they throw a last `CONNECTION_CLOSE` packet out and do not wait for any acknowledgement (more a TCP **RST**). curl used that in `ngtcp2` and `quiche` already before and in 8.9 it handles blocked sends of this packet in addition.
+
+Note that QUIC uses a 60+ bit connection identifier and has no inherent reliance on unique address+port quadruples. Meaning ports are way better reusable in QUIC than in TCP.
 
 #### Other Protocols
 
