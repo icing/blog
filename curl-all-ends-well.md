@@ -1,10 +1,10 @@
-# All's well that ends well - curl edition
+# All's well that ends well
 
 In the upcoming [curl](https://curl.se) 8.9.0 release, we gave some love to ending connections in a better way. What does that mean? Will it affect you? Let's start with the End.
 
 ### The End of a Connection
 
-For most transfers curl establishes a TCP connection to a server (I disregard UDP in this blog). At some time, the connection will need to be closed again. There are several ways this is triggered:
+For almost all transfers curl establishes a connection to a server. At some time, the connection will need to be closed again. There are several ways this is triggered:
 
 - the server closes
 - there was a network error while sending/receiving
@@ -21,7 +21,7 @@ When an error occurs, when the transfer cannot be completed, we just close. Howe
 
 #### Shutting down TCP
 
-Let's say the connection does not involve TLS, proxying or other fancy stuff. Just basic TCP like your grandparents used to do it. To shut down such a connection gracefully, it is a good idea to make some last *receive* on the socket. This will consume any packets that might exist in the TCP stack. When we close afterwards, there is a good chance that a **FIN** is being sent to the server. Would we close the socket without receiving, any unprocessed packets will cause a **RST** to be sent instead.
+Let's say the connection does not involve TLS, proxying or other fancy stuff. Just basic TCP like your grandparents used to do it. To shut down such a connection gracefully, it is a good idea to make some last *receive* on the socket. This consumes any packets that might exist in the TCP stack. When we close afterwards, there is a good chance that a **FIN** is being sent to the server. Would we close the socket without receiving, any unprocessed packets cause a **RST** to be sent instead.
 
 A **FIN** is a friendly "Goodbye!" at the end of the TCP conversation while a **RST** is like walking away while the other person is still talking. Rude! 
 
@@ -49,22 +49,40 @@ The order in which a curl connection needs to shut down is defined by its connec
 
 ![Connection Filter Shutdowns](images/shutdown-order.png)
 
-During the shutdown, data will be sent and received through the filters "below". Since curl filters operate non-blocking, an attempt to send or receive may have to be delayed. curl will then monitor the socket accordingly, e.g. "poll" it. 
+During the shutdown, data is sent and received through the filters "below". Since curl filters operate non-blocking, an attempt to send or receive may have to be delayed. curl then monitors the socket accordingly, e.g. "poll" it. 
 
-By default, a timeout of 2 seconds is in place for all filters of a connection to shutdown. This will happen "behind the curtain" when your application uses `curl_multi_perform()` or `curl_multi_socket()`. And it will not stop other transfers from progressing.
+By default, a timeout of 2 seconds is in place for all filters of a connection to shutdown. This happens "behind the curtain" when your application uses `curl_multi_perform()` or `curl_multi_socket()`. And it does not stop other transfers from progressing. 
+
+In a typical "multi" loop, it all happens without you changing your code:
+
+```c
+  do {
+    /* also progresses shutdowns now */
+    CURLMcode mc = curl_multi_perform(multi_handle, &still_running);
+
+    if(still_running)
+      /* monitors shutdown sockets as well */
+      mc = curl_multi_poll(multi_handle, NULL, 0, 1000, NULL);
+
+    if(mc)
+      break;
+  } while(still_running);
+
+```
+
 
 #### Limitations
 
-If you use `curl_easy_perform()` however, shutdowns will be a one-time, best-effort attempt. If shutdown data cannot be send or received right away, the connection closes. We did this to stay backward compatible to previous behaviour.
+If you use `curl_easy_perform()` however, shutdowns are a one-time, best-effort attempt. If shutdown data cannot be send or received right away, the connection closes. We did this to stay backward compatible to previous behaviour.
 
 The same best-effort thing happens when you do a `curl_multi_cleanup()`. Also due to compatibility reasons. We may introduce a `curl_multi_shutdown()` in the future to make this graceful. Your input on this is appreciated.
 
 #### Changes in Behaviour
 
-When a connection is aborted, e.g. a transfer failed, curl will no longer do TLS shutdowns. In earlier versions, curl always tried to send a **CLOSE-NOTIFY** on closing a connection. This is no longer the case. And it is the right change to avoid broken transfers to be considered successful.
+When a connection is aborted, e.g. a transfer failed, curl now no longer does TLS shutdowns. In earlier versions, curl always tried to send a **CLOSE-NOTIFY** on closing a connection. This is no longer the case. And it is the right change to avoid broken transfers to be considered successful.
 
 ### Conclusions
 
-Curl connection shutdowns will come in curl 8.9.0. You'll get their full benefit if you operate a multi handle. They will work gracefully in FTP up- and downloads, fixing behaviour in FTPS transfers.
+Curl connection shutdowns is coming in curl 8.9.0. You'll get their full benefit if you operate a multi handle. They work gracefully in FTP up- and downloads, fixing behaviour in FTPS transfers.
 
 Otherwise, they stay - if we did not screw things up - invisible for you. We might introduce options and functions in the API to make them more controllable by the application. This depends on your input. Do you have needs that we should accommodate?
