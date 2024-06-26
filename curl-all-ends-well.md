@@ -43,7 +43,7 @@ There is a graceful shutdown defined in the QUIC RFC which exchanges mutual clos
 
 Both `ngtcp2` and `quiche` only implement a best-effort shutdown (so far). This means they throw a last `CONNECTION_CLOSE` packet out and do not wait for any acknowledgement (more a TCP **RST**). curl used that in `ngtcp2` and `quiche` already before and in 8.9 it handles blocked sends of this packet in addition.
 
-Note that QUIC uses a 60+ bit connection identifier and has no inherent reliance on unique address+port quadruples. Meaning ports are way better reusable in QUIC than in TCP.
+Note that QUIC uses a connection identifier (up to 64 bits long) and has no inherent reliance on unique address+port quadruples. Meaning ports are way better reusable in QUIC than in TCP.
 
 #### Other Protocols
 
