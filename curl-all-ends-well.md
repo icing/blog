@@ -83,6 +83,6 @@ When a connection is aborted, e.g. a transfer failed, curl now no longer does TL
 
 ### Conclusions
 
-Curl connection shutdowns is coming in curl 8.9.0. You'll get their full benefit if you operate a multi handle. They work gracefully in FTP up- and downloads, fixing behaviour in FTPS transfers.
+Curl connection shutdowns are coming in curl 8.9.0. You'll get their full benefit if you operate a multi handle. They work gracefully in FTP up- and downloads, fixing behaviour in FTPS transfers.
 
 Otherwise, they stay - if we did not screw things up - invisible for you. We might introduce options and functions in the API to make them more controllable by the application. This depends on your input. Do you have needs that we should accommodate?
