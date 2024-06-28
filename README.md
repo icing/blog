@@ -2,6 +2,7 @@
 
 Short things to share.
 
+* [Every End is a Beginning](every-end-is-a-beginning.md)
 * [All's well that ends well - curl edition](curl-all-ends-well.md)
 * [curl HTTP/2 Performance Evolution](curl-h2-perf-evolution.md)
 * [curl HTTP/3 Performance](curl-h3-performance.md)
