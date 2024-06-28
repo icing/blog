@@ -25,7 +25,8 @@ A **FIN** is a friendly "Goodbye!" at the end of the TCP conversation while a **
 
 Now, we are talking about computers here, so why does being rude matter, really? To answer that precisely for TCP, you can dig really deep into protocol RFCs and blogs. Learn about states and sequence numbers and the problem of NATs and firewalls, read papers from the 90s etc, attack mitigation, etc...fun without end!
 
-But let's cut it short: if you can **FIN**, then **FIN**.
+But let's cut it short: if you can **FIN**, then **FIN**. If you want to know more, 
+[please see this blog where I explain why](./every-end-is-a-beginning.md).
 
 #### Shutting down TLS
 
