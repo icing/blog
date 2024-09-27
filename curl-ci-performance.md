@@ -2,6 +2,7 @@
 
 Over the last months, [Viktor Szakats](https://github.com/vszakats) and me worked on improving curl's CI system. Viktor focused on improvements in the various builds and how we cover all the platforms that we test on. I looked into improving the test suite reliability and performance.
 
+As I like to say, our CI is the weapon we slay the dragons with that lurk in code. It needs to be sharp and precise. Even for a [little hobby project like curl](https://daniel.haxx.se/blog/2024/04/22/curl-is-just-the-hobby/).
 
 ### A Plethora of Things
 
