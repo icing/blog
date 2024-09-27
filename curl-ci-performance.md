@@ -14,7 +14,7 @@ With the improved reliability, we want to give fist-time committers a better exp
 
 ![Curl CI Job Performance](./images/curl-ci-performance.png)
 
-Read this graph as *number of CI jobs taking this many minutes*. 8 weeks ago, there was one job that took 55 minutes and 11 that took only 1 minute or less. Now we have 25 taking 1 minute and 39 taking 2 minutes, etc.
+Read this graph as *number of CI jobs taking this many minutes*. 8 weeks ago, there was one job that took 55 minutes and 11 that took only 1 minute or less. Now we have 25 taking 1 minute and 39 taking 2 minutes, etc. The "finished" marker is the longest running job. This is mostly the overall time of the CI, however some jobs like the curl fuzzer have dependencies, so it can vary a bit.
 
 What did we do?
 
