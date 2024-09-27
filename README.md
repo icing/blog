@@ -2,6 +2,7 @@
 
 Short things to share.
 
+* [curl CI performance](curl-ci-performance.md)
 * [Proof of Pi](proof-of-pi.md)
 * [Every End is a Beginning](every-end-is-a-beginning.md)
 * [All's well that ends well - curl edition](curl-all-ends-well.md)
