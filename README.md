@@ -2,6 +2,7 @@
 
 Short things to share.
 
+* [curl sessions and early data](curl-sessions-earlydata.md)
 * [curl CI performance](curl-ci-performance.md)
 * [Proof of Pi](proof-of-pi.md)
 * [Every End is a Beginning](every-end-is-a-beginning.md)
