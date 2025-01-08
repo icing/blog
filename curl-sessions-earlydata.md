@@ -44,6 +44,8 @@ With TLSv1.3, the client may - when resuming a session - already send data *befo
 
 And this is why the benchmark shows a significant improvement with early data. Because I have some latency to curl.se from my home. And this explains also why *you* may see different numbers.
 
+(Note that early data is only implemented for GnuTLS for now. We'll add support for that in other TLS backends in the future.)
+
 ### Security Aspects
 
 Now, why doesn't `curl` do this automatically all the time? Well, there are some security aspects to consider. The session file contains data that you might not want to have stored automatically on a machine where you use curl.
