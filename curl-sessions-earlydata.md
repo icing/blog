@@ -22,9 +22,15 @@ I cannot predict how this will work on your system. This very much depends on th
 ```
 Then I added `--ssl-session file` and did 100 runs. Finally, I added `--tls-earlydata` (my curl is built with GnuTLS where curl has early data support). And then I did all of it again with `--http3-only`.
 
-![Subjective Measurements of curl TLS sessions and early data performance by author](./images/curl-sessions-earlydata.png)
+![Subjective Measurements of curl TLS sessions and early data performance by author for curl.se](./images/curl-sess-early-curl.se.png)
 
-The `time_total` is the overall time from when `curl` starts connecting to when it has downloaded the ~10KB of the page. The transfer gets somewhat faster when importing sessions and noticeably faster when early data is in play. What is going on?
+The `time_total` is the overall time from when `curl` starts connecting to when it has downloaded the ~10KB of the page. The transfer time stays basically the same when importing sessions and is noticeably faster when early data is used. Now, `curl.se` has a ping time of about ~18ms for me. Let's try a host somewhat further away, like `nghttp2.org` with a ping time of ~260ms:
+
+![Subjective Measurements of curl TLS sessions and early data performance by author for nghttp2.org](./images/curl-sess-early-nghttp2.org.png)
+
+We see that HTTP/3 saves one round-trip in each case. That is the initial TCP connection establishment. But when we use TLSv1.3 early data on HTTP/2, we compensate for that. (Also, you see that Fastly becomes even faster on h2 - that might reflect how their h2/h3 and caching implementation works internally.)
+
+Looking at it another way: if a server you talk to does not support QUIC, you might get similar benefits from using plain old TCP with sessions and early data.
 
 ### SSL Sessions Effect
 
@@ -32,9 +38,9 @@ You can think of an SSL session as a token a server sends to a client: "Use this
 
 When resuming a session on a new TLS connection, the handshake is kept smaller. Specifically the server will not send its certificates (and the chain certificates) again. The client had already seen those.
 
-This explains the effect you see in the benchmark. When sessions are imported and a TLS resumption can be done, the handshake is a few milliseconds faster. Then the `GET` request can start earlier and the whole transfer is quicker.
+This saving of bandwidth has no effect in my measurements as the bandwidth is large enough. Sending a few KB of certificate data makes no difference. On a mobile network, this might give more benefits.
 
-In addition to this, the server may announce support for "Early Data" in an SSL session (TLSv1.3 is needed for that). And this means...
+The picture really changes when the server supports "Early Data" in an SSL session (TLSv1.3 is needed for that). And this means...
 
 ### Early Data Effect
 
@@ -54,10 +60,10 @@ Now, why doesn't `curl` do this automatically all the time? Well, there are some
 
 But the salted hash does not prevent someone from checking if you have connected to `www.furries.net` in the recent past. Or try a brute-force attack on guessed names.
 
-**Also important**, and maybe even more relevant, the session tickets itself is stored unencrypted (only base64 encoded). The ticket is coming form the TLS backend used and contains host specific information. GnuTLS stores the hostname and certificate information there. So, by base64 decoding that part of a session file, it is easy to see where the session ticket came from. (Another reason why this feature is experimental for now.)
+**Also important**, and more relevant, the session tickets itself is stored unencrypted (only base64 encoded). The ticket is coming form the TLS backend used and contains host specific information. GnuTLS stores the hostname and certificate information there. So, by base64 decoding that part of a session file, it is easy to see where the session ticket came from. (Another reason why this feature is experimental for now. We might have the trade offs between usability and security not fully correct yet.)
 
 Early Data has other security implications. It is not as secure as other TLS traffic. It's a trade off. And it depends what kind of requests you do with it. There are many articles about it by people more knowledgeable than me, if you are interested.
 
 ### Experimental
 
-We made this feature *experimental* in curl, because we need feedback from our users if the current implementation is good enough. Let us know!
+We made this feature *experimental* in curl, because we need feedback from our users if the current implementation is good enough. The privacy/security concerns around storing TLS sessions in a file are of special concern. Let us know what you think!
