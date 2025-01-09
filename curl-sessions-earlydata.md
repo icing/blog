@@ -15,7 +15,7 @@ Now, what is this good for? I'll explain some TLS details below, but who wants t
 
 ### Benchmark (ymmv)
 
-I cannot predict how this will work on your system. I did measurements on mine and the graph shows what I am seeing. I did 100 runs of 
+I cannot predict how this will work on your system. This very much depends on the latency and bandwidth to the server. I did measurements from my machine to `curl.se` (fronted by Fastly's CDN). I did 100 runs of 
 
 ```
 > curl -s https://curl.se -o /dev/null -w '%{time_appconnect} %{time_total}\n'
@@ -53,6 +53,8 @@ Now, why doesn't `curl` do this automatically all the time? Well, there are some
 `curl` uses salted hashes instead of hostnames in the file. This prevents anyone who can read the file to easily see what hosts you have been talking to. This works similar to `ssh`'s 'known_hosts' file, if you are familiar with that. 
 
 But the salted hash does not prevent someone from checking if you have connected to `www.furries.net` in the recent past. Or try a brute-force attack on guessed names.
+
+**Also important**, and maybe even more relevant, the session tickets itself is stored unencrypted (only base64 encoded). The ticket is coming form the TLS backend used and contains host specific information. GnuTLS stores the hostname and certificate information there. So, by base64 decoding that part of a session file, it is easy to see where the session ticket came from. (Another reason why this feature is experimental for now.)
 
 Early Data has other security implications. It is not as secure as other TLS traffic. It's a trade off. And it depends what kind of requests you do with it. There are many articles about it by people more knowledgeable than me, if you are interested.
 
