@@ -12,6 +12,7 @@ This will work for all TLS backends that support SSL sessions in a format suitab
 
 Now, what is this good for? I'll explain some TLS details below, but who wants to read walls of text if they can look at an image?
 
+***Update***: I added measurements for "Time To First Byte" which explains observed numbers better.
 
 ### Benchmark (ymmv)
 
@@ -28,9 +29,7 @@ The `time_total` is the overall time from when `curl` starts connecting to when 
 
 ![Subjective Measurements of curl TLS sessions and early data performance by author for nghttp2.org](./images/curl-sess-early-nghttp2.org.png)
 
-We see that HTTP/3 saves one round-trip in each case. That is the initial TCP connection establishment. But when we use TLSv1.3 early data on HTTP/2, we compensate for that. (Also, you see that Fastly becomes even faster on h2 - that might reflect how their h2/h3 and caching implementation works internally.)
-
-Looking at it another way: if a server you talk to does not support QUIC, you might get similar benefits from using plain old TCP with sessions and early data.
+We see that HTTP/3 saves one round-trip in each case. That is the initial TCP connection establishment. But when we use TLSv1.3 early data on HTTP/2, we compensate for that. HTTP/3 is still faster in delivering the first byte of the response, but the total time for the complete transfer can be better in HTTP/2. This depends on the overall latency of the connection, where we seen that QUIC+HTTP/3 can show what it is made for.
 
 ### SSL Sessions Effect
 
