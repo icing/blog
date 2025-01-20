@@ -8,11 +8,12 @@ First, if you have added `printf(...)` statements before, only to remove them ag
 
 One challenge when putting your code into the hands of people on the internet is that they often run it in environments that you have never seen before and *you do not have access to*. That maybe because it runs in their internal network or on a public system with credentials you do not have.
 
-While "it works on my machine" is a common meme, the reverse is often true: "***It will never fail on your machine**". Because you are unable to reproduce the conditions a user has. You can add CI jobs as much as you want (curl has now close to 200!), but the world is a large place. So, what do do?
+While "it works on my machine" is a common meme, the reverse is often true: "**It will never fail on your machine**". Because you are unable to reproduce the conditions a user has. You can add CI jobs as much as you want (curl has now close to 200!), but the world is a large place. So, what do do?
 
 You enable your users to do the debugging themselves by giving them easy to understand and effective to control **logging capabilities** so they can get an understanding **wtf is going on**. And when they cannot figure it out, they can easily **share the logs with you**.
 
 ![Unhappy People with a Trace](./images/unhappy-without-trace.png)
+(The image shows some people rather unhappy that they have no trace.)
 
 ### Log Files Anatomy
 
@@ -78,7 +79,7 @@ How does a trace statement look in HTTP/2 code? Here is the line that outputs th
     CURL_TRC_CF(data, cf, "[%d] status: HTTP/2 %03d", stream->id, stream->status_code);
 ```
 
-here `data` is the current transfer (for historic reasons they carry this name - naming is hard). `cf` is the "connection filter" involved. The `cf` is of type "HTTP/2". You can think of it as the "class" of a connection filter and `cf` is an instance of that class. The rest is like a `printf()` statement.
+here `data` is the current transfer (for historic reasons they carry this name - naming is hard). `cf` is the "connection filter" involved. The `cf` is of type "HTTP/2". You can think of it as the "class" of a connection filter and `cf` is an instance of that class. The rest is like a `printf()` statement. It is short and does not impede on the readability of your code.
 
 As you may have guessed from the uppercase writing, `CURL_TRC_CF()` is a C macro.
 
