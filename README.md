@@ -1,6 +1,6 @@
 # blog
 
-Short things to share.
+Short things to share:
 
 * [Apache ACME Profiles](apache-acme-profiles.md)
 * [curl logging/tracing](curl-tracing.md)
