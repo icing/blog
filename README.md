@@ -2,6 +2,7 @@
 
 Short things to share:
 
+* [curl Flame Graphs](curl-flamegraphs.md)
 * [Apache ACME Profiles](apache-acme-profiles.md)
 * [curl logging/tracing](curl-tracing.md)
 * [curl sessions and early data](curl-sessions-earlydata.md)

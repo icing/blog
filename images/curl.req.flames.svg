@@ -1,0 +1,2295 @@
+<?xml version="1.0" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" width="1200" height="526" onload="init(evt)" viewBox="0 0 1200 526" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<!-- Flame graph stack visualization. See https://github.com/brendangregg/FlameGraph for latest version, and http://www.brendangregg.com/flamegraphs.html for examples. -->
+<!-- NOTES:  -->
+<defs>
+	<linearGradient id="background" y1="0" y2="1" x1="0" x2="0" >
+		<stop stop-color="#f8f8f8" offset="5%" />
+		<stop stop-color="#e8e8e8" offset="95%" />
+	</linearGradient>
+</defs>
+<style type="text/css">
+	text { font-family:Verdana; font-size:12px; fill:rgb(0,0,0); }
+	#search, #ignorecase { opacity:0.1; cursor:pointer; }
+	#search:hover, #search.show, #ignorecase:hover, #ignorecase.show { opacity:1; }
+	#subtitle { text-anchor:middle; font-color:rgb(160,160,160); }
+	#title { text-anchor:middle; font-size:17px}
+	#unzoom { cursor:pointer; }
+	#frames > *:hover { stroke:black; stroke-width:0.5; cursor:pointer; }
+	.hide { display:none; }
+	.parent { opacity:0.5; }
+</style>
+<script type="text/ecmascript">
+<![CDATA[
+	"use strict";
+	var details, searchbtn, unzoombtn, matchedtxt, svg, searching, currentSearchTerm, ignorecase, ignorecaseBtn;
+	function init(evt) {
+		details = document.getElementById("details").firstChild;
+		searchbtn = document.getElementById("search");
+		ignorecaseBtn = document.getElementById("ignorecase");
+		unzoombtn = document.getElementById("unzoom");
+		matchedtxt = document.getElementById("matched");
+		svg = document.getElementsByTagName("svg")[0];
+		searching = 0;
+		currentSearchTerm = null;
+
+		// use GET parameters to restore a flamegraphs state.
+		var params = get_params();
+		if (params.x && params.y)
+			zoom(find_group(document.querySelector('[x="' + params.x + '"][y="' + params.y + '"]')));
+                if (params.s) search(params.s);
+	}
+
+	// event listeners
+	window.addEventListener("click", function(e) {
+		var target = find_group(e.target);
+		if (target) {
+			if (target.nodeName == "a") {
+				if (e.ctrlKey === false) return;
+				e.preventDefault();
+			}
+			if (target.classList.contains("parent")) unzoom(true);
+			zoom(target);
+			if (!document.querySelector('.parent')) {
+				// we have basically done a clearzoom so clear the url
+				var params = get_params();
+				if (params.x) delete params.x;
+				if (params.y) delete params.y;
+				history.replaceState(null, null, parse_params(params));
+				unzoombtn.classList.add("hide");
+				return;
+			}
+
+			// set parameters for zoom state
+			var el = target.querySelector("rect");
+			if (el && el.attributes && el.attributes.y && el.attributes._orig_x) {
+				var params = get_params()
+				params.x = el.attributes._orig_x.value;
+				params.y = el.attributes.y.value;
+				history.replaceState(null, null, parse_params(params));
+			}
+		}
+		else if (e.target.id == "unzoom") clearzoom();
+		else if (e.target.id == "search") search_prompt();
+		else if (e.target.id == "ignorecase") toggle_ignorecase();
+	}, false)
+
+	// mouse-over for info
+	// show
+	window.addEventListener("mouseover", function(e) {
+		var target = find_group(e.target);
+		if (target) details.nodeValue = "Function: " + g_to_text(target);
+	}, false)
+
+	// clear
+	window.addEventListener("mouseout", function(e) {
+		var target = find_group(e.target);
+		if (target) details.nodeValue = ' ';
+	}, false)
+
+	// ctrl-F for search
+	// ctrl-I to toggle case-sensitive search
+	window.addEventListener("keydown",function (e) {
+		if (e.keyCode === 114 || (e.ctrlKey && e.keyCode === 70)) {
+			e.preventDefault();
+			search_prompt();
+		}
+		else if (e.ctrlKey && e.keyCode === 73) {
+			e.preventDefault();
+			toggle_ignorecase();
+		}
+	}, false)
+
+	// functions
+	function get_params() {
+		var params = {};
+		var paramsarr = window.location.search.substr(1).split('&');
+		for (var i = 0; i < paramsarr.length; ++i) {
+			var tmp = paramsarr[i].split("=");
+			if (!tmp[0] || !tmp[1]) continue;
+			params[tmp[0]]  = decodeURIComponent(tmp[1]);
+		}
+		return params;
+	}
+	function parse_params(params) {
+		var uri = "?";
+		for (var key in params) {
+			uri += key + '=' + encodeURIComponent(params[key]) + '&';
+		}
+		if (uri.slice(-1) == "&")
+			uri = uri.substring(0, uri.length - 1);
+		if (uri == '?')
+			uri = window.location.href.split('?')[0];
+		return uri;
+	}
+	function find_child(node, selector) {
+		var children = node.querySelectorAll(selector);
+		if (children.length) return children[0];
+	}
+	function find_group(node) {
+		var parent = node.parentElement;
+		if (!parent) return;
+		if (parent.id == "frames") return node;
+		return find_group(parent);
+	}
+	function orig_save(e, attr, val) {
+		if (e.attributes["_orig_" + attr] != undefined) return;
+		if (e.attributes[attr] == undefined) return;
+		if (val == undefined) val = e.attributes[attr].value;
+		e.setAttribute("_orig_" + attr, val);
+	}
+	function orig_load(e, attr) {
+		if (e.attributes["_orig_"+attr] == undefined) return;
+		e.attributes[attr].value = e.attributes["_orig_" + attr].value;
+		e.removeAttribute("_orig_"+attr);
+	}
+	function g_to_text(e) {
+		var text = find_child(e, "title").firstChild.nodeValue;
+		return (text)
+	}
+	function g_to_func(e) {
+		var func = g_to_text(e);
+		// if there's any manipulation we want to do to the function
+		// name before it's searched, do it here before returning.
+		return (func);
+	}
+	function update_text(e) {
+		var r = find_child(e, "rect");
+		var t = find_child(e, "text");
+		var w = parseFloat(r.attributes.width.value) -3;
+		var txt = find_child(e, "title").textContent.replace(/\([^(]*\)$/,"");
+		t.attributes.x.value = parseFloat(r.attributes.x.value) + 3;
+
+		// Smaller than this size won't fit anything
+		if (w < 2 * 12 * 0.59) {
+			t.textContent = "";
+			return;
+		}
+
+		t.textContent = txt;
+		var sl = t.getSubStringLength(0, txt.length);
+		// check if only whitespace or if we can fit the entire string into width w
+		if (/^ *$/.test(txt) || sl < w)
+			return;
+
+		// this isn't perfect, but gives a good starting point
+		// and avoids calling getSubStringLength too often
+		var start = Math.floor((w/sl) * txt.length);
+		for (var x = start; x > 0; x = x-2) {
+			if (t.getSubStringLength(0, x + 2) <= w) {
+				t.textContent = txt.substring(0, x) + "..";
+				return;
+			}
+		}
+		t.textContent = "";
+	}
+
+	// zoom
+	function zoom_reset(e) {
+		if (e.attributes != undefined) {
+			orig_load(e, "x");
+			orig_load(e, "width");
+		}
+		if (e.childNodes == undefined) return;
+		for (var i = 0, c = e.childNodes; i < c.length; i++) {
+			zoom_reset(c[i]);
+		}
+	}
+	function zoom_child(e, x, ratio) {
+		if (e.attributes != undefined) {
+			if (e.attributes.x != undefined) {
+				orig_save(e, "x");
+				e.attributes.x.value = (parseFloat(e.attributes.x.value) - x - 10) * ratio + 10;
+				if (e.tagName == "text")
+					e.attributes.x.value = find_child(e.parentNode, "rect[x]").attributes.x.value + 3;
+			}
+			if (e.attributes.width != undefined) {
+				orig_save(e, "width");
+				e.attributes.width.value = parseFloat(e.attributes.width.value) * ratio;
+			}
+		}
+
+		if (e.childNodes == undefined) return;
+		for (var i = 0, c = e.childNodes; i < c.length; i++) {
+			zoom_child(c[i], x - 10, ratio);
+		}
+	}
+	function zoom_parent(e) {
+		if (e.attributes) {
+			if (e.attributes.x != undefined) {
+				orig_save(e, "x");
+				e.attributes.x.value = 10;
+			}
+			if (e.attributes.width != undefined) {
+				orig_save(e, "width");
+				e.attributes.width.value = parseInt(svg.width.baseVal.value) - (10 * 2);
+			}
+		}
+		if (e.childNodes == undefined) return;
+		for (var i = 0, c = e.childNodes; i < c.length; i++) {
+			zoom_parent(c[i]);
+		}
+	}
+	function zoom(node) {
+		var attr = find_child(node, "rect").attributes;
+		var width = parseFloat(attr.width.value);
+		var xmin = parseFloat(attr.x.value);
+		var xmax = parseFloat(xmin + width);
+		var ymin = parseFloat(attr.y.value);
+		var ratio = (svg.width.baseVal.value - 2 * 10) / width;
+
+		// XXX: Workaround for JavaScript float issues (fix me)
+		var fudge = 0.0001;
+
+		unzoombtn.classList.remove("hide");
+
+		var el = document.getElementById("frames").children;
+		for (var i = 0; i < el.length; i++) {
+			var e = el[i];
+			var a = find_child(e, "rect").attributes;
+			var ex = parseFloat(a.x.value);
+			var ew = parseFloat(a.width.value);
+			var upstack;
+			// Is it an ancestor
+			if (0 == 0) {
+				upstack = parseFloat(a.y.value) > ymin;
+			} else {
+				upstack = parseFloat(a.y.value) < ymin;
+			}
+			if (upstack) {
+				// Direct ancestor
+				if (ex <= xmin && (ex+ew+fudge) >= xmax) {
+					e.classList.add("parent");
+					zoom_parent(e);
+					update_text(e);
+				}
+				// not in current path
+				else
+					e.classList.add("hide");
+			}
+			// Children maybe
+			else {
+				// no common path
+				if (ex < xmin || ex + fudge >= xmax) {
+					e.classList.add("hide");
+				}
+				else {
+					zoom_child(e, xmin, ratio);
+					update_text(e);
+				}
+			}
+		}
+		search();
+	}
+	function unzoom(dont_update_text) {
+		unzoombtn.classList.add("hide");
+		var el = document.getElementById("frames").children;
+		for(var i = 0; i < el.length; i++) {
+			el[i].classList.remove("parent");
+			el[i].classList.remove("hide");
+			zoom_reset(el[i]);
+			if(!dont_update_text) update_text(el[i]);
+		}
+		search();
+	}
+	function clearzoom() {
+		unzoom();
+
+		// remove zoom state
+		var params = get_params();
+		if (params.x) delete params.x;
+		if (params.y) delete params.y;
+		history.replaceState(null, null, parse_params(params));
+	}
+
+	// search
+	function toggle_ignorecase() {
+		ignorecase = !ignorecase;
+		if (ignorecase) {
+			ignorecaseBtn.classList.add("show");
+		} else {
+			ignorecaseBtn.classList.remove("show");
+		}
+		reset_search();
+		search();
+	}
+	function reset_search() {
+		var el = document.querySelectorAll("#frames rect");
+		for (var i = 0; i < el.length; i++) {
+			orig_load(el[i], "fill")
+		}
+		var params = get_params();
+		delete params.s;
+		history.replaceState(null, null, parse_params(params));
+	}
+	function search_prompt() {
+		if (!searching) {
+			var term = prompt("Enter a search term (regexp " +
+			    "allowed, eg: ^ext4_)"
+			    + (ignorecase ? ", ignoring case" : "")
+			    + "\nPress Ctrl-i to toggle case sensitivity", "");
+			if (term != null) search(term);
+		} else {
+			reset_search();
+			searching = 0;
+			currentSearchTerm = null;
+			searchbtn.classList.remove("show");
+			searchbtn.firstChild.nodeValue = "Search"
+			matchedtxt.classList.add("hide");
+			matchedtxt.firstChild.nodeValue = ""
+		}
+	}
+	function search(term) {
+		if (term) currentSearchTerm = term;
+		if (currentSearchTerm === null) return;
+
+		var re = new RegExp(currentSearchTerm, ignorecase ? 'i' : '');
+		var el = document.getElementById("frames").children;
+		var matches = new Object();
+		var maxwidth = 0;
+		for (var i = 0; i < el.length; i++) {
+			var e = el[i];
+			var func = g_to_func(e);
+			var rect = find_child(e, "rect");
+			if (func == null || rect == null)
+				continue;
+
+			// Save max width. Only works as we have a root frame
+			var w = parseFloat(rect.attributes.width.value);
+			if (w > maxwidth)
+				maxwidth = w;
+
+			if (func.match(re)) {
+				// highlight
+				var x = parseFloat(rect.attributes.x.value);
+				orig_save(rect, "fill");
+				rect.attributes.fill.value = "rgb(230,0,230)";
+
+				// remember matches
+				if (matches[x] == undefined) {
+					matches[x] = w;
+				} else {
+					if (w > matches[x]) {
+						// overwrite with parent
+						matches[x] = w;
+					}
+				}
+				searching = 1;
+			}
+		}
+		if (!searching)
+			return;
+		var params = get_params();
+		params.s = currentSearchTerm;
+		history.replaceState(null, null, parse_params(params));
+
+		searchbtn.classList.add("show");
+		searchbtn.firstChild.nodeValue = "Reset Search";
+
+		// calculate percent matched, excluding vertical overlap
+		var count = 0;
+		var lastx = -1;
+		var lastw = 0;
+		var keys = Array();
+		for (k in matches) {
+			if (matches.hasOwnProperty(k))
+				keys.push(k);
+		}
+		// sort the matched frames by their x location
+		// ascending, then width descending
+		keys.sort(function(a, b){
+			return a - b;
+		});
+		// Step through frames saving only the biggest bottom-up frames
+		// thanks to the sort order. This relies on the tree property
+		// where children are always smaller than their parents.
+		var fudge = 0.0001;	// JavaScript floating point
+		for (var k in keys) {
+			var x = parseFloat(keys[k]);
+			var w = matches[keys[k]];
+			if (x >= lastx + lastw - fudge) {
+				count += w;
+				lastx = x;
+				lastw = w;
+			}
+		}
+		// display matched percent
+		matchedtxt.classList.remove("hide");
+		var pct = 100 * count / maxwidth;
+		if (pct != 100) pct = pct.toFixed(1)
+		matchedtxt.firstChild.nodeValue = "Matched: " + pct + "%";
+	}
+]]>
+</script>
+<rect x="0.0" y="0" width="1200.0" height="526.0" fill="url(#background)"  />
+<text id="title" x="600.00" y="24" >curl, HTTP/2 50000 requests</text>
+<text id="subtitle" x="600.00" y="48" >1 connection, 100 max parallel, https://localhost, 10KB resource</text>
+<text id="details" x="10.00" y="509" > </text>
+<text id="unzoom" x="10.00" y="24" class="hide">Reset Zoom</text>
+<text id="search" x="1090.00" y="24" >Search</text>
+<text id="ignorecase" x="1174.00" y="24" >ic</text>
+<text id="matched" x="1090.00" y="509" > </text>
+<g id="frames">
+<g >
+<title>libsystem_malloc.dylib`_nanov2_free (1 samples, 0.24%)</title><rect x="69.1" y="349" width="2.9" height="15.0" fill="rgb(227,227,69)" rx="2" ry="2" />
+<text  x="72.14" y="359.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curl_easy_setopt (2 samples, 0.48%)</title><rect x="43.8" y="333" width="5.6" height="15.0" fill="rgb(216,216,65)" rx="2" ry="2" />
+<text  x="46.79" y="343.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curl_mvaprintf (2 samples, 0.48%)</title><rect x="263.5" y="317" width="5.6" height="15.0" fill="rgb(218,218,65)" rx="2" ry="2" />
+<text  x="266.46" y="327.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curlx_dyn_free (1 samples, 0.24%)</title><rect x="953.4" y="221" width="2.9" height="15.0" fill="rgb(188,188,55)" rx="2" ry="2" />
+<text  x="956.44" y="231.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curlx_dyn_addn (1 samples, 0.24%)</title><rect x="263.5" y="269" width="2.8" height="15.0" fill="rgb(212,212,63)" rx="2" ry="2" />
+<text  x="266.46" y="279.5" ></text>
+</g>
+<g >
+<title>libssl.3.dylib`WPACKET_put_bytes__ (1 samples, 0.24%)</title><rect x="398.6" y="125" width="2.9" height="15.0" fill="rgb(217,217,65)" rx="2" ry="2" />
+<text  x="401.64" y="135.5" ></text>
+</g>
+<g >
+<title>libcrypto.3.dylib`ossl_err_get_state_int (1 samples, 0.24%)</title><rect x="300.1" y="173" width="2.8" height="15.0" fill="rgb(191,191,55)" rx="2" ry="2" />
+<text  x="303.07" y="183.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curl_multi_remove_handle (1 samples, 0.24%)</title><rect x="1156.2" y="397" width="2.8" height="15.0" fill="rgb(227,227,68)" rx="2" ry="2" />
+<text  x="1159.21" y="407.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`tiny_free_no_lock (1 samples, 0.24%)</title><rect x="432.4" y="205" width="2.9" height="15.0" fill="rgb(220,220,66)" rx="2" ry="2" />
+<text  x="435.43" y="215.5" ></text>
+</g>
+<g >
+<title>libsystem_c.dylib`__swsetup (12 samples, 2.86%)</title><rect x="897.1" y="109" width="33.8" height="15.0" fill="rgb(181,181,52)" rx="2" ry="2" />
+<text  x="900.11" y="119.5" >li..</text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_cf_def_send (1 samples, 0.24%)</title><rect x="297.3" y="237" width="2.8" height="15.0" fill="rgb(187,187,54)" rx="2" ry="2" />
+<text  x="300.26" y="247.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curl_mvaprintf (6 samples, 1.43%)</title><rect x="457.8" y="333" width="16.9" height="15.0" fill="rgb(218,218,65)" rx="2" ry="2" />
+<text  x="460.78" y="343.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`alloc_addbyter (3 samples, 0.72%)</title><rect x="483.1" y="301" width="8.5" height="15.0" fill="rgb(196,196,57)" rx="2" ry="2" />
+<text  x="486.13" y="311.5" ></text>
+</g>
+<g >
+<title>libcrypto.3.dylib`EVP_CIPHER_CTX_ctrl (1 samples, 0.24%)</title><rect x="584.5" y="157" width="2.8" height="15.0" fill="rgb(212,212,63)" rx="2" ry="2" />
+<text  x="587.51" y="167.5" ></text>
+</g>
+<g >
+<title>curl`glob_next_url (1 samples, 0.24%)</title><rect x="63.5" y="365" width="2.8" height="15.0" fill="rgb(220,220,66)" rx="2" ry="2" />
+<text  x="66.51" y="375.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curl_mvaprintf (1 samples, 0.24%)</title><rect x="55.1" y="285" width="2.8" height="15.0" fill="rgb(218,218,65)" rx="2" ry="2" />
+<text  x="58.06" y="295.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_headers_push (2 samples, 0.48%)</title><rect x="992.9" y="189" width="5.6" height="15.0" fill="rgb(186,186,54)" rx="2" ry="2" />
+<text  x="995.86" y="199.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curl_msnprintf (3 samples, 0.72%)</title><rect x="232.5" y="333" width="8.4" height="15.0" fill="rgb(202,202,60)" rx="2" ry="2" />
+<text  x="235.48" y="343.5" ></text>
+</g>
+<g >
+<title>curl`main (409 samples, 97.61%)</title><rect x="10.0" y="445" width="1151.8" height="15.0" fill="rgb(218,218,65)" rx="2" ry="2" />
+<text  x="13.00" y="455.5" >curl`main</text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_conn_free (4 samples, 0.95%)</title><rect x="193.1" y="349" width="11.2" height="15.0" fill="rgb(180,180,51)" rx="2" ry="2" />
+<text  x="196.05" y="359.5" ></text>
+</g>
+<g >
+<title>libsystem_c.dylib`clock_gettime (1 samples, 0.24%)</title><rect x="497.2" y="333" width="2.8" height="15.0" fill="rgb(195,195,57)" rx="2" ry="2" />
+<text  x="500.21" y="343.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curlx_dyn_addn (1 samples, 0.24%)</title><rect x="240.9" y="317" width="2.8" height="15.0" fill="rgb(212,212,63)" rx="2" ry="2" />
+<text  x="243.93" y="327.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`addbyter (1 samples, 0.24%)</title><rect x="63.5" y="317" width="2.8" height="15.0" fill="rgb(187,187,54)" rx="2" ry="2" />
+<text  x="66.51" y="327.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`_nanov2_free (1 samples, 0.24%)</title><rect x="198.7" y="333" width="2.8" height="15.0" fill="rgb(227,227,69)" rx="2" ry="2" />
+<text  x="201.69" y="343.5" ></text>
+</g>
+<g >
+<title>libcrypto.3.dylib`ossl_gcm_stream_update (1 samples, 0.24%)</title><rect x="587.3" y="141" width="2.8" height="15.0" fill="rgb(180,180,52)" rx="2" ry="2" />
+<text  x="590.33" y="151.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`cw_download_write (5 samples, 1.19%)</title><rect x="978.8" y="205" width="14.1" height="15.0" fill="rgb(210,210,63)" rx="2" ry="2" />
+<text  x="981.78" y="215.5" ></text>
+</g>
+<g >
+<title>libcrypto.3.dylib`ossl_param_find_pidx (1 samples, 0.24%)</title><rect x="584.5" y="141" width="2.8" height="15.0" fill="rgb(225,225,68)" rx="2" ry="2" />
+<text  x="587.51" y="151.5" ></text>
+</g>
+<g >
+<title>libsystem_kernel.dylib`__ioctl (2 samples, 0.48%)</title><rect x="21.3" y="317" width="5.6" height="15.0" fill="rgb(184,184,53)" rx="2" ry="2" />
+<text  x="24.26" y="327.5" ></text>
+</g>
+<g >
+<title>libcrypto.3.dylib`ossl_gcm_stream_update (1 samples, 0.24%)</title><rect x="407.1" y="93" width="2.8" height="15.0" fill="rgb(180,180,52)" rx="2" ry="2" />
+<text  x="410.09" y="103.5" ></text>
+</g>
+<g >
+<title>libssl.3.dylib`tls13_cipher (4 samples, 0.95%)</title><rect x="401.5" y="125" width="11.2" height="15.0" fill="rgb(212,212,63)" rx="2" ry="2" />
+<text  x="404.46" y="135.5" ></text>
+</g>
+<g >
+<title>libsystem_c.dylib`fwrite (18 samples, 4.30%)</title><rect x="897.1" y="141" width="50.7" height="15.0" fill="rgb(202,202,59)" rx="2" ry="2" />
+<text  x="900.11" y="151.5" >libsy..</text>
+</g>
+<g >
+<title>libcurl.4.dylib`ossl_recv (36 samples, 8.59%)</title><rect x="567.6" y="269" width="101.4" height="15.0" fill="rgb(206,206,61)" rx="2" ry="2" />
+<text  x="570.61" y="279.5" >libcurl.4.dy..</text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_client_write (1 samples, 0.24%)</title><rect x="956.3" y="205" width="2.8" height="15.0" fill="rgb(196,196,57)" rx="2" ry="2" />
+<text  x="959.25" y="215.5" ></text>
+</g>
+<g >
+<title>libsystem_platform.dylib`_platform_memmove$VARIANT$Haswell (1 samples, 0.24%)</title><rect x="471.9" y="269" width="2.8" height="15.0" fill="rgb(227,227,69)" rx="2" ry="2" />
+<text  x="474.86" y="279.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`nanov2_malloc_type (1 samples, 0.24%)</title><rect x="224.0" y="317" width="2.8" height="15.0" fill="rgb(184,184,53)" rx="2" ry="2" />
+<text  x="227.03" y="327.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_flush_cookies (1 samples, 0.24%)</title><rect x="97.3" y="349" width="2.8" height="15.0" fill="rgb(194,194,56)" rx="2" ry="2" />
+<text  x="100.30" y="359.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_xfer_send (64 samples, 15.27%)</title><rect x="277.5" y="317" width="180.3" height="15.0" fill="rgb(183,183,53)" rx="2" ry="2" />
+<text  x="280.54" y="327.5" >libcurl.4.dylib`Curl_xf..</text>
+</g>
+<g >
+<title>libsystem_c.dylib`strdup (1 samples, 0.24%)</title><rect x="255.0" y="317" width="2.8" height="15.0" fill="rgb(191,191,56)" rx="2" ry="2" />
+<text  x="258.01" y="327.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`xfer_send (64 samples, 15.27%)</title><rect x="277.5" y="333" width="180.3" height="15.0" fill="rgb(223,223,67)" rx="2" ry="2" />
+<text  x="280.54" y="343.5" >libcurl.4.dylib`xfer_send</text>
+</g>
+<g >
+<title>libcurl.4.dylib`DYLD-STUB$$memcpy (1 samples, 0.24%)</title><rect x="294.4" y="269" width="2.9" height="15.0" fill="rgb(200,200,59)" rx="2" ry="2" />
+<text  x="297.44" y="279.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`cf_socket_send (1 samples, 0.24%)</title><rect x="311.3" y="77" width="2.9" height="15.0" fill="rgb(189,189,55)" rx="2" ry="2" />
+<text  x="314.34" y="87.5" ></text>
+</g>
+<g >
+<title>libsystem_c.dylib`clock_gettime_nsec_np (1 samples, 0.24%)</title><rect x="497.2" y="317" width="2.8" height="15.0" fill="rgb(188,188,54)" rx="2" ry="2" />
+<text  x="500.21" y="327.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`tiny_free_list_add_ptr (1 samples, 0.24%)</title><rect x="438.1" y="221" width="2.8" height="15.0" fill="rgb(180,180,51)" rx="2" ry="2" />
+<text  x="441.07" y="231.5" ></text>
+</g>
+<g >
+<title>libnghttp2.14.dylib`nghttp2_check_header_value (3 samples, 0.72%)</title><rect x="1035.1" y="269" width="8.5" height="15.0" fill="rgb(223,223,67)" rx="2" ry="2" />
+<text  x="1038.11" y="279.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_http (80 samples, 19.09%)</title><rect x="271.9" y="365" width="225.3" height="15.0" fill="rgb(177,177,51)" rx="2" ry="2" />
+<text  x="274.91" y="375.5" >libcurl.4.dylib`Curl_http</text>
+</g>
+<g >
+<title>libcrypto.3.dylib`gcm_cipher_internal (1 samples, 0.24%)</title><rect x="407.1" y="77" width="2.8" height="15.0" fill="rgb(198,198,58)" rx="2" ry="2" />
+<text  x="410.09" y="87.5" ></text>
+</g>
+<g >
+<title>curl`progressbarinit (4 samples, 0.95%)</title><rect x="15.6" y="349" width="11.3" height="15.0" fill="rgb(207,207,61)" rx="2" ry="2" />
+<text  x="18.63" y="359.5" ></text>
+</g>
+<g >
+<title>libcrypto.3.dylib`ossl_gcm_setiv (1 samples, 0.24%)</title><rect x="587.3" y="109" width="2.8" height="15.0" fill="rgb(229,229,69)" rx="2" ry="2" />
+<text  x="590.33" y="119.5" ></text>
+</g>
+<g >
+<title>libssl.3.dylib`SSL_write (42 samples, 10.02%)</title><rect x="305.7" y="189" width="118.3" height="15.0" fill="rgb(200,200,59)" rx="2" ry="2" />
+<text  x="308.70" y="199.5" >libssl.3.dylib..</text>
+</g>
+<g >
+<title>libssl.3.dylib`tls13_cipher (3 samples, 0.72%)</title><rect x="584.5" y="173" width="8.5" height="15.0" fill="rgb(212,212,63)" rx="2" ry="2" />
+<text  x="587.51" y="183.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`free_tiny (1 samples, 0.24%)</title><rect x="1159.0" y="397" width="2.8" height="15.0" fill="rgb(221,221,66)" rx="2" ry="2" />
+<text  x="1162.02" y="407.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curl_easy_getinfo (1 samples, 0.24%)</title><rect x="86.0" y="349" width="2.9" height="15.0" fill="rgb(219,219,66)" rx="2" ry="2" />
+<text  x="89.04" y="359.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_open (3 samples, 0.72%)</title><rect x="72.0" y="349" width="8.4" height="15.0" fill="rgb(222,222,67)" rx="2" ry="2" />
+<text  x="74.96" y="359.5" ></text>
+</g>
+<g >
+<title>libssl.3.dylib`tls_default_read_n (26 samples, 6.21%)</title><rect x="593.0" y="173" width="73.2" height="15.0" fill="rgb(225,225,68)" rx="2" ry="2" />
+<text  x="595.96" y="183.5" >libssl.3..</text>
+</g>
+<g >
+<title>libcurl.4.dylib`http_rw_hd (11 samples, 2.63%)</title><rect x="973.2" y="237" width="30.9" height="15.0" fill="rgb(217,217,65)" rx="2" ry="2" />
+<text  x="976.15" y="247.5" >li..</text>
+</g>
+<g >
+<title>libsystem_platform.dylib`_platform_memmove$VARIANT$Haswell (1 samples, 0.24%)</title><rect x="66.3" y="317" width="2.8" height="15.0" fill="rgb(227,227,69)" rx="2" ry="2" />
+<text  x="69.32" y="327.5" ></text>
+</g>
+<g >
+<title>curl`tool_setopt_long (4 samples, 0.95%)</title><rect x="41.0" y="349" width="11.2" height="15.0" fill="rgb(202,202,60)" rx="2" ry="2" />
+<text  x="43.98" y="359.5" ></text>
+</g>
+<g >
+<title>libnghttp2.14.dylib`nghttp2_check_header_value (1 samples, 0.24%)</title><rect x="1006.9" y="285" width="2.9" height="15.0" fill="rgb(223,223,67)" rx="2" ry="2" />
+<text  x="1009.95" y="295.5" ></text>
+</g>
+<g >
+<title>libsystem_c.dylib`clock_gettime (1 samples, 0.24%)</title><rect x="207.1" y="301" width="2.9" height="15.0" fill="rgb(195,195,57)" rx="2" ry="2" />
+<text  x="210.14" y="311.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`formatf (2 samples, 0.48%)</title><rect x="263.5" y="301" width="5.6" height="15.0" fill="rgb(209,209,62)" rx="2" ry="2" />
+<text  x="266.46" y="311.5" ></text>
+</g>
+<g >
+<title>libcrypto.3.dylib`gcm_cipher_internal (1 samples, 0.24%)</title><rect x="587.3" y="125" width="2.8" height="15.0" fill="rgb(198,198,58)" rx="2" ry="2" />
+<text  x="590.33" y="135.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`req_flush (6 samples, 1.43%)</title><rect x="536.6" y="333" width="16.9" height="15.0" fill="rgb(200,200,59)" rx="2" ry="2" />
+<text  x="539.63" y="343.5" ></text>
+</g>
+<g >
+<title>libsystem_c.dylib`__sfvwrite (17 samples, 4.06%)</title><rect x="897.1" y="125" width="47.9" height="15.0" fill="rgb(221,221,66)" rx="2" ry="2" />
+<text  x="900.11" y="135.5" >libs..</text>
+</g>
+<g >
+<title>libcrypto.3.dylib`EVP_DecryptUpdate (1 samples, 0.24%)</title><rect x="587.3" y="157" width="2.8" height="15.0" fill="rgb(197,197,58)" rx="2" ry="2" />
+<text  x="590.33" y="167.5" ></text>
+</g>
+<g >
+<title>libnghttp2.14.dylib`nghttp2_session_close_stream (1 samples, 0.24%)</title><rect x="1049.2" y="269" width="2.8" height="15.0" fill="rgb(197,197,58)" rx="2" ry="2" />
+<text  x="1052.19" y="279.5" ></text>
+</g>
+<g >
+<title>libcrypto.3.dylib`DYLD-STUB$$__error (1 samples, 0.24%)</title><rect x="573.2" y="237" width="2.9" height="15.0" fill="rgb(186,186,54)" rx="2" ry="2" />
+<text  x="576.25" y="247.5" ></text>
+</g>
+<g >
+<title>libnghttp2.14.dylib`nghttp2_map_find (1 samples, 0.24%)</title><rect x="1043.6" y="285" width="2.8" height="15.0" fill="rgb(213,213,63)" rx="2" ry="2" />
+<text  x="1046.56" y="295.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`szone_malloc_type_malloc (1 samples, 0.24%)</title><rect x="928.1" y="93" width="2.8" height="15.0" fill="rgb(176,176,50)" rx="2" ry="2" />
+<text  x="931.09" y="103.5" ></text>
+</g>
+<g >
+<title>libnghttp2.14.dylib`nghttp2_http_on_header (4 samples, 0.95%)</title><rect x="1032.3" y="285" width="11.3" height="15.0" fill="rgb(187,187,54)" rx="2" ry="2" />
+<text  x="1035.29" y="295.5" ></text>
+</g>
+<g >
+<title>curl`glob_match_url (1 samples, 0.24%)</title><rect x="66.3" y="349" width="2.8" height="15.0" fill="rgb(215,215,64)" rx="2" ry="2" />
+<text  x="69.32" y="359.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`tiny_free_no_lock (1 samples, 0.24%)</title><rect x="1159.0" y="381" width="2.8" height="15.0" fill="rgb(220,220,66)" rx="2" ry="2" />
+<text  x="1162.02" y="391.5" ></text>
+</g>
+<g >
+<title>curl`proto_token (1 samples, 0.24%)</title><rect x="26.9" y="349" width="2.8" height="15.0" fill="rgb(209,209,62)" rx="2" ry="2" />
+<text  x="29.90" y="359.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_multi_getsock (9 samples, 2.15%)</title><rect x="1130.9" y="365" width="25.3" height="15.0" fill="rgb(218,218,65)" rx="2" ry="2" />
+<text  x="1133.86" y="375.5" >l..</text>
+</g>
+<g >
+<title>libcurl.4.dylib`req_set_upload_done (3 samples, 0.72%)</title><rect x="545.1" y="317" width="8.4" height="15.0" fill="rgb(214,214,64)" rx="2" ry="2" />
+<text  x="548.08" y="327.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`multi_wait (9 samples, 2.15%)</title><rect x="1130.9" y="381" width="25.3" height="15.0" fill="rgb(187,187,54)" rx="2" ry="2" />
+<text  x="1133.86" y="391.5" >l..</text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`_nanov2_free (2 samples, 0.48%)</title><rect x="553.5" y="285" width="5.7" height="15.0" fill="rgb(227,227,69)" rx="2" ry="2" />
+<text  x="556.53" y="295.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`http2_data_setup (1 samples, 0.24%)</title><rect x="438.1" y="285" width="2.8" height="15.0" fill="rgb(192,192,56)" rx="2" ry="2" />
+<text  x="441.07" y="295.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_safecmp (1 samples, 0.24%)</title><rect x="187.4" y="285" width="2.8" height="15.0" fill="rgb(228,228,69)" rx="2" ry="2" />
+<text  x="190.42" y="295.5" ></text>
+</g>
+<g >
+<title>libnghttp2.14.dylib`nghttp2_hd_inflate_hd_nv (7 samples, 1.67%)</title><rect x="1012.6" y="285" width="19.7" height="15.0" fill="rgb(200,200,59)" rx="2" ry="2" />
+<text  x="1015.58" y="295.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_init_do (2 samples, 0.48%)</title><rect x="204.3" y="349" width="5.7" height="15.0" fill="rgb(178,178,51)" rx="2" ry="2" />
+<text  x="207.32" y="359.5" ></text>
+</g>
+<g >
+<title>libsystem_c.dylib`clock_gettime (3 samples, 0.72%)</title><rect x="545.1" y="269" width="8.4" height="15.0" fill="rgb(195,195,57)" rx="2" ry="2" />
+<text  x="548.08" y="279.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curl_multi_poll (9 samples, 2.15%)</title><rect x="1130.9" y="397" width="25.3" height="15.0" fill="rgb(180,180,52)" rx="2" ry="2" />
+<text  x="1133.86" y="407.5" >l..</text>
+</g>
+<g >
+<title>libsystem_kernel.dylib`mach_continuous_time (1 samples, 0.24%)</title><rect x="550.7" y="253" width="2.8" height="15.0" fill="rgb(215,215,64)" rx="2" ry="2" />
+<text  x="553.72" y="263.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`http_write_header (1 samples, 0.24%)</title><rect x="956.3" y="221" width="2.8" height="15.0" fill="rgb(219,219,66)" rx="2" ry="2" />
+<text  x="959.25" y="231.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curl_msnprintf (1 samples, 0.24%)</title><rect x="970.3" y="269" width="2.9" height="15.0" fill="rgb(202,202,60)" rx="2" ry="2" />
+<text  x="973.33" y="279.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curlx_dyn_addn (1 samples, 0.24%)</title><rect x="950.6" y="221" width="2.8" height="15.0" fill="rgb(212,212,63)" rx="2" ry="2" />
+<text  x="953.62" y="231.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`urlencode_str (1 samples, 0.24%)</title><rect x="240.9" y="333" width="2.8" height="15.0" fill="rgb(211,211,63)" rx="2" ry="2" />
+<text  x="243.93" y="343.5" ></text>
+</g>
+<g >
+<title>libsystem_c.dylib`clock_gettime_nsec_np (1 samples, 0.24%)</title><rect x="1125.2" y="285" width="2.8" height="15.0" fill="rgb(188,188,54)" rx="2" ry="2" />
+<text  x="1128.23" y="295.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`free_tiny (1 samples, 0.24%)</title><rect x="1122.4" y="301" width="2.8" height="15.0" fill="rgb(221,221,66)" rx="2" ry="2" />
+<text  x="1125.41" y="311.5" ></text>
+</g>
+<g >
+<title>libsystem_c.dylib`getenv (1 samples, 0.24%)</title><rect x="215.6" y="333" width="2.8" height="15.0" fill="rgb(204,204,60)" rx="2" ry="2" />
+<text  x="218.58" y="343.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`on_header (17 samples, 4.06%)</title><rect x="959.1" y="285" width="47.8" height="15.0" fill="rgb(181,181,52)" rx="2" ry="2" />
+<text  x="962.07" y="295.5" >libc..</text>
+</g>
+<g >
+<title>libcurl.4.dylib`curl_getenv (1 samples, 0.24%)</title><rect x="18.4" y="317" width="2.9" height="15.0" fill="rgb(227,227,68)" rx="2" ry="2" />
+<text  x="21.45" y="327.5" ></text>
+</g>
+<g >
+<title>libcrypto.3.dylib`ERR_clear_error (2 samples, 0.48%)</title><rect x="570.4" y="253" width="5.7" height="15.0" fill="rgb(183,183,52)" rx="2" ry="2" />
+<text  x="573.43" y="263.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`set_url (6 samples, 1.43%)</title><rect x="246.6" y="349" width="16.9" height="15.0" fill="rgb(213,213,63)" rx="2" ry="2" />
+<text  x="249.56" y="359.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`parse_authority (1 samples, 0.24%)</title><rect x="55.1" y="317" width="2.8" height="15.0" fill="rgb(198,198,58)" rx="2" ry="2" />
+<text  x="58.06" y="327.5" ></text>
+</g>
+<g >
+<title>libssl.3.dylib`ssl3_write_bytes (42 samples, 10.02%)</title><rect x="305.7" y="173" width="118.3" height="15.0" fill="rgb(175,175,50)" rx="2" ry="2" />
+<text  x="308.70" y="183.5" >libssl.3.dylib..</text>
+</g>
+<g >
+<title>libcurl.4.dylib`curl_strequal (1 samples, 0.24%)</title><rect x="956.3" y="93" width="2.8" height="15.0" fill="rgb(228,228,69)" rx="2" ry="2" />
+<text  x="959.25" y="103.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_dynhds_add (2 samples, 0.48%)</title><rect x="280.4" y="269" width="5.6" height="15.0" fill="rgb(192,192,56)" rx="2" ry="2" />
+<text  x="283.36" y="279.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`_nanov2_free (2 samples, 0.48%)</title><rect x="1021.0" y="269" width="5.7" height="15.0" fill="rgb(227,227,69)" rx="2" ry="2" />
+<text  x="1024.03" y="279.5" ></text>
+</g>
+<g >
+<title>libsystem_kernel.dylib`mach_continuous_time (1 samples, 0.24%)</title><rect x="207.1" y="269" width="2.9" height="15.0" fill="rgb(215,215,64)" rx="2" ry="2" />
+<text  x="210.14" y="279.5" ></text>
+</g>
+<g >
+<title>libcrypto.3.dylib`EVP_EncryptFinal_ex (1 samples, 0.24%)</title><rect x="404.3" y="109" width="2.8" height="15.0" fill="rgb(225,225,68)" rx="2" ry="2" />
+<text  x="407.27" y="119.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curl_msnprintf (1 samples, 0.24%)</title><rect x="63.5" y="349" width="2.8" height="15.0" fill="rgb(202,202,60)" rx="2" ry="2" />
+<text  x="66.51" y="359.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_conn_cf_recv (1 samples, 0.24%)</title><rect x="562.0" y="285" width="2.8" height="15.0" fill="rgb(177,177,50)" rx="2" ry="2" />
+<text  x="564.98" y="295.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`cw_out_write (3 samples, 0.72%)</title><rect x="984.4" y="189" width="8.5" height="15.0" fill="rgb(218,218,65)" rx="2" ry="2" />
+<text  x="987.42" y="199.5" ></text>
+</g>
+<g >
+<title>libcrypto.3.dylib`BIO_write (31 samples, 7.40%)</title><rect x="311.3" y="141" width="87.3" height="15.0" fill="rgb(190,190,55)" rx="2" ry="2" />
+<text  x="314.34" y="151.5" >libcrypto...</text>
+</g>
+<g >
+<title>libsystem_c.dylib`__findenv_locked (1 samples, 0.24%)</title><rect x="215.6" y="317" width="2.8" height="15.0" fill="rgb(191,191,55)" rx="2" ry="2" />
+<text  x="218.58" y="327.5" ></text>
+</g>
+<g >
+<title>dyld`start (409 samples, 97.61%)</title><rect x="10.0" y="461" width="1151.8" height="15.0" fill="rgb(188,188,54)" rx="2" ry="2" />
+<text  x="13.00" y="471.5" >dyld`start</text>
+</g>
+<g >
+<title>libsystem_c.dylib`strdup (1 samples, 0.24%)</title><rect x="57.9" y="317" width="2.8" height="15.0" fill="rgb(191,191,56)" rx="2" ry="2" />
+<text  x="60.88" y="327.5" ></text>
+</g>
+<g >
+<title>libssl.3.dylib`SSL_read (32 samples, 7.64%)</title><rect x="576.1" y="253" width="90.1" height="15.0" fill="rgb(226,226,68)" rx="2" ry="2" />
+<text  x="579.06" y="263.5" >libssl.3.d..</text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_socket_check (9 samples, 2.15%)</title><rect x="1130.9" y="317" width="25.3" height="15.0" fill="rgb(225,225,68)" rx="2" ry="2" />
+<text  x="1133.86" y="327.5" >l..</text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`DYLD-STUB$$_platform_bzero (1 samples, 0.24%)</title><rect x="508.5" y="285" width="2.8" height="15.0" fill="rgb(178,178,51)" rx="2" ry="2" />
+<text  x="511.47" y="295.5" ></text>
+</g>
+<g >
+<title>libsystem_kernel.dylib`_mach_continuous_time (1 samples, 0.24%)</title><rect x="1125.2" y="253" width="2.8" height="15.0" fill="rgb(200,200,59)" rx="2" ry="2" />
+<text  x="1128.23" y="263.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curl_multi_add_handle (1 samples, 0.24%)</title><rect x="80.4" y="381" width="2.8" height="15.0" fill="rgb(178,178,51)" rx="2" ry="2" />
+<text  x="83.41" y="391.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`_malloc_zone_realloc (1 samples, 0.24%)</title><rect x="485.9" y="253" width="2.9" height="15.0" fill="rgb(193,193,56)" rx="2" ry="2" />
+<text  x="488.94" y="263.5" ></text>
+</g>
+<g >
+<title>libsystem_c.dylib`__sfp (4 samples, 0.95%)</title><rect x="694.3" y="109" width="11.3" height="15.0" fill="rgb(192,192,56)" rx="2" ry="2" />
+<text  x="697.34" y="119.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`malloc (1 samples, 0.24%)</title><rect x="1026.7" y="269" width="2.8" height="15.0" fill="rgb(222,222,67)" rx="2" ry="2" />
+<text  x="1029.66" y="279.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`nanov2_calloc_type (1 samples, 0.24%)</title><rect x="269.1" y="349" width="2.8" height="15.0" fill="rgb(200,200,59)" rx="2" ry="2" />
+<text  x="272.09" y="359.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`_nanov2_free (3 samples, 0.72%)</title><rect x="102.9" y="349" width="8.5" height="15.0" fill="rgb(227,227,69)" rx="2" ry="2" />
+<text  x="105.94" y="359.5" ></text>
+</g>
+<g >
+<title>libsystem_kernel.dylib`poll (9 samples, 2.15%)</title><rect x="1130.9" y="301" width="25.3" height="15.0" fill="rgb(210,210,62)" rx="2" ry="2" />
+<text  x="1133.86" y="311.5" >l..</text>
+</g>
+<g >
+<title>libnghttp2.14.dylib`nghttp2_session_consume (1 samples, 0.24%)</title><rect x="1046.4" y="285" width="2.8" height="15.0" fill="rgb(200,200,59)" rx="2" ry="2" />
+<text  x="1049.37" y="295.5" ></text>
+</g>
+<g >
+<title>curl`tool_header_cb (1 samples, 0.24%)</title><rect x="956.3" y="125" width="2.8" height="15.0" fill="rgb(221,221,66)" rx="2" ry="2" />
+<text  x="959.25" y="135.5" ></text>
+</g>
+<g >
+<title>libsystem_platform.dylib`_platform_memcmp$VARIANT$Base (1 samples, 0.24%)</title><rect x="170.5" y="285" width="2.8" height="15.0" fill="rgb(196,196,57)" rx="2" ry="2" />
+<text  x="173.53" y="295.5" ></text>
+</g>
+<g >
+<title>libsystem_c.dylib`__sflush (3 samples, 0.72%)</title><rect x="128.3" y="365" width="8.4" height="15.0" fill="rgb(198,198,58)" rx="2" ry="2" />
+<text  x="131.28" y="375.5" ></text>
+</g>
+<g >
+<title>libsystem_platform.dylib`_platform_bzero$VARIANT$Haswell (1 samples, 0.24%)</title><rect x="556.3" y="269" width="2.9" height="15.0" fill="rgb(194,194,56)" rx="2" ry="2" />
+<text  x="559.35" y="279.5" ></text>
+</g>
+<g >
+<title>libnghttp2.14.dylib`nghttp2_nv_array_copy (3 samples, 0.72%)</title><rect x="446.5" y="253" width="8.5" height="15.0" fill="rgb(204,204,60)" rx="2" ry="2" />
+<text  x="449.52" y="263.5" ></text>
+</g>
+<g >
+<title>libsystem_kernel.dylib`_mach_continuous_time (1 samples, 0.24%)</title><rect x="497.2" y="285" width="2.8" height="15.0" fill="rgb(200,200,59)" rx="2" ry="2" />
+<text  x="500.21" y="295.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curlx_now (1 samples, 0.24%)</title><rect x="497.2" y="349" width="2.8" height="15.0" fill="rgb(195,195,57)" rx="2" ry="2" />
+<text  x="500.21" y="359.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curl_easy_setopt (3 samples, 0.72%)</title><rect x="32.5" y="333" width="8.5" height="15.0" fill="rgb(216,216,65)" rx="2" ry="2" />
+<text  x="35.53" y="343.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curl_easy_cleanup (11 samples, 2.63%)</title><rect x="97.3" y="381" width="31.0" height="15.0" fill="rgb(193,193,56)" rx="2" ry="2" />
+<text  x="100.30" y="391.5" >li..</text>
+</g>
+<g >
+<title>libsystem_c.dylib`fputc (2 samples, 0.48%)</title><rect x="91.7" y="285" width="5.6" height="15.0" fill="rgb(221,221,66)" rx="2" ry="2" />
+<text  x="94.67" y="295.5" ></text>
+</g>
+<g >
+<title>curl`tool_write_cb (90 samples, 21.48%)</title><rect x="694.3" y="157" width="253.5" height="15.0" fill="rgb(221,221,67)" rx="2" ry="2" />
+<text  x="697.34" y="167.5" >curl`tool_write_cb</text>
+</g>
+<g >
+<title>libcurl.4.dylib`formatf (1 samples, 0.24%)</title><rect x="55.1" y="269" width="2.8" height="15.0" fill="rgb(209,209,62)" rx="2" ry="2" />
+<text  x="58.06" y="279.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_hash_destroy (1 samples, 0.24%)</title><rect x="193.1" y="333" width="2.8" height="15.0" fill="rgb(223,223,67)" rx="2" ry="2" />
+<text  x="196.05" y="343.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curl_maprintf (2 samples, 0.48%)</title><rect x="263.5" y="333" width="5.6" height="15.0" fill="rgb(177,177,50)" rx="2" ry="2" />
+<text  x="266.46" y="343.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_xfer_write_resp_hd (1 samples, 0.24%)</title><rect x="1004.1" y="253" width="2.8" height="15.0" fill="rgb(201,201,59)" rx="2" ry="2" />
+<text  x="1007.13" y="263.5" ></text>
+</g>
+<g >
+<title>libsystem_platform.dylib`_platform_strcmp (1 samples, 0.24%)</title><rect x="49.4" y="333" width="2.8" height="15.0" fill="rgb(183,183,53)" rx="2" ry="2" />
+<text  x="52.43" y="343.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`nanov2_malloc_type (1 samples, 0.24%)</title><rect x="502.8" y="317" width="2.9" height="15.0" fill="rgb(184,184,53)" rx="2" ry="2" />
+<text  x="505.84" y="327.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_debug (1 samples, 0.24%)</title><rect x="998.5" y="221" width="2.8" height="15.0" fill="rgb(223,223,67)" rx="2" ry="2" />
+<text  x="1001.50" y="231.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curlx_now (1 samples, 0.24%)</title><rect x="207.1" y="317" width="2.9" height="15.0" fill="rgb(195,195,57)" rx="2" ry="2" />
+<text  x="210.14" y="327.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`cf_socket_cntrl (1 samples, 0.24%)</title><rect x="212.8" y="349" width="2.8" height="15.0" fill="rgb(209,209,62)" rx="2" ry="2" />
+<text  x="215.77" y="359.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_http_write_resp_hd (11 samples, 2.63%)</title><rect x="973.2" y="253" width="30.9" height="15.0" fill="rgb(178,178,51)" rx="2" ry="2" />
+<text  x="976.15" y="263.5" >li..</text>
+</g>
+<g >
+<title>libcurl.4.dylib`curlx_dyn_addn (1 samples, 0.24%)</title><rect x="55.1" y="221" width="2.8" height="15.0" fill="rgb(212,212,63)" rx="2" ry="2" />
+<text  x="58.06" y="231.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_str2addr (1 samples, 0.24%)</title><rect x="511.3" y="333" width="2.8" height="15.0" fill="rgb(218,218,65)" rx="2" ry="2" />
+<text  x="514.29" y="343.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curl_easy_init (3 samples, 0.72%)</title><rect x="72.0" y="365" width="8.4" height="15.0" fill="rgb(181,181,52)" rx="2" ry="2" />
+<text  x="74.96" y="375.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`ConnectionExists (8 samples, 1.91%)</title><rect x="170.5" y="349" width="22.6" height="15.0" fill="rgb(208,208,62)" rx="2" ry="2" />
+<text  x="173.53" y="359.5" >l..</text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`nanov2_malloc_type (1 samples, 0.24%)</title><rect x="469.0" y="269" width="2.9" height="15.0" fill="rgb(184,184,53)" rx="2" ry="2" />
+<text  x="472.05" y="279.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_client_write (92 samples, 21.96%)</title><rect x="688.7" y="253" width="259.1" height="15.0" fill="rgb(196,196,57)" rx="2" ry="2" />
+<text  x="691.71" y="263.5" >libcurl.4.dylib`Curl_client_write</text>
+</g>
+<g >
+<title>libcurl.4.dylib`parseurl_and_replace (3 samples, 0.72%)</title><rect x="52.2" y="333" width="8.5" height="15.0" fill="rgb(199,199,58)" rx="2" ry="2" />
+<text  x="55.24" y="343.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`fputc_wrapper (2 samples, 0.48%)</title><rect x="91.7" y="301" width="5.6" height="15.0" fill="rgb(202,202,59)" rx="2" ry="2" />
+<text  x="94.67" y="311.5" ></text>
+</g>
+<g >
+<title>libcrypto.3.dylib`bwrite_conv (31 samples, 7.40%)</title><rect x="311.3" y="109" width="87.3" height="15.0" fill="rgb(186,186,54)" rx="2" ry="2" />
+<text  x="314.34" y="119.5" >libcrypto...</text>
+</g>
+<g >
+<title>libcurl.4.dylib`cf_socket_data_pending (9 samples, 2.15%)</title><rect x="1130.9" y="333" width="25.3" height="15.0" fill="rgb(192,192,56)" rx="2" ry="2" />
+<text  x="1133.86" y="343.5" >l..</text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`tiny_free_list_remove_ptr (1 samples, 0.24%)</title><rect x="1159.0" y="365" width="2.8" height="15.0" fill="rgb(228,228,69)" rx="2" ry="2" />
+<text  x="1162.02" y="375.5" ></text>
+</g>
+<g >
+<title>libnghttp2.14.dylib`nghttp2_bufs_next_present (1 samples, 0.24%)</title><rect x="426.8" y="237" width="2.8" height="15.0" fill="rgb(200,200,59)" rx="2" ry="2" />
+<text  x="429.80" y="247.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_dynhds_h1_add_line (3 samples, 0.72%)</title><rect x="286.0" y="269" width="8.4" height="15.0" fill="rgb(186,186,54)" rx="2" ry="2" />
+<text  x="288.99" y="279.5" ></text>
+</g>
+<g >
+<title>libssl.3.dylib`WPACKET_init_static_len (1 samples, 0.24%)</title><rect x="590.1" y="157" width="2.9" height="15.0" fill="rgb(204,204,60)" rx="2" ry="2" />
+<text  x="593.14" y="167.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`nanov2_calloc_type (1 samples, 0.24%)</title><rect x="491.6" y="317" width="2.8" height="15.0" fill="rgb(200,200,59)" rx="2" ry="2" />
+<text  x="494.58" y="327.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_http_req_to_h2 (1 samples, 0.24%)</title><rect x="277.5" y="301" width="2.9" height="15.0" fill="rgb(209,209,62)" rx="2" ry="2" />
+<text  x="280.54" y="311.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curlx_dyn_addn (3 samples, 0.72%)</title><rect x="466.2" y="285" width="8.5" height="15.0" fill="rgb(212,212,63)" rx="2" ry="2" />
+<text  x="469.23" y="295.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_raw_toupper (3 samples, 0.72%)</title><rect x="984.4" y="93" width="8.5" height="15.0" fill="rgb(222,222,67)" rx="2" ry="2" />
+<text  x="987.42" y="103.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`nanov2_malloc_type (1 samples, 0.24%)</title><rect x="243.7" y="317" width="2.9" height="15.0" fill="rgb(184,184,53)" rx="2" ry="2" />
+<text  x="246.75" y="327.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curlx_str_key_compare (1 samples, 0.24%)</title><rect x="170.5" y="301" width="2.8" height="15.0" fill="rgb(212,212,63)" rx="2" ry="2" />
+<text  x="173.53" y="311.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_pgrsTime (3 samples, 0.72%)</title><rect x="545.1" y="301" width="8.4" height="15.0" fill="rgb(176,176,50)" rx="2" ry="2" />
+<text  x="548.08" y="311.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`ossl_send (44 samples, 10.50%)</title><rect x="300.1" y="205" width="123.9" height="15.0" fill="rgb(193,193,56)" rx="2" ry="2" />
+<text  x="303.07" y="215.5" >libcurl.4.dylib..</text>
+</g>
+<g >
+<title>libcurl.4.dylib`h2_process_pending_input (136 samples, 32.46%)</title><rect x="671.8" y="317" width="383.0" height="15.0" fill="rgb(216,216,65)" rx="2" ry="2" />
+<text  x="674.81" y="327.5" >libcurl.4.dylib`h2_process_pending_input</text>
+</g>
+<g >
+<title>libsystem_c.dylib`isatty (3 samples, 0.72%)</title><rect x="902.7" y="77" width="8.5" height="15.0" fill="rgb(219,219,66)" rx="2" ry="2" />
+<text  x="905.74" y="87.5" ></text>
+</g>
+<g >
+<title>libcrypto.3.dylib`CRYPTO_free (1 samples, 0.24%)</title><rect x="570.4" y="237" width="2.8" height="15.0" fill="rgb(175,175,50)" rx="2" ry="2" />
+<text  x="573.43" y="247.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`free (1 samples, 0.24%)</title><rect x="201.5" y="333" width="2.8" height="15.0" fill="rgb(203,203,60)" rx="2" ry="2" />
+<text  x="204.50" y="343.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`ossl_bio_cf_in_read (24 samples, 5.73%)</title><rect x="598.6" y="109" width="67.6" height="15.0" fill="rgb(175,175,50)" rx="2" ry="2" />
+<text  x="601.59" y="119.5" >libcurl..</text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_h1_req_parse_read (5 samples, 1.19%)</title><rect x="280.4" y="285" width="14.0" height="15.0" fill="rgb(180,180,52)" rx="2" ry="2" />
+<text  x="283.36" y="295.5" ></text>
+</g>
+<g >
+<title>curl`operate (409 samples, 97.61%)</title><rect x="10.0" y="429" width="1151.8" height="15.0" fill="rgb(176,176,50)" rx="2" ry="2" />
+<text  x="13.00" y="439.5" >curl`operate</text>
+</g>
+<g >
+<title>libcurl.4.dylib`h2_progress_egress (2 samples, 0.48%)</title><rect x="553.5" y="333" width="5.7" height="15.0" fill="rgb(176,176,50)" rx="2" ry="2" />
+<text  x="556.53" y="343.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curl_msnprintf (1 samples, 0.24%)</title><rect x="514.1" y="333" width="2.8" height="15.0" fill="rgb(202,202,60)" rx="2" ry="2" />
+<text  x="517.11" y="343.5" ></text>
+</g>
+<g >
+<title>libcrypto.3.dylib`ERR_clear_error (1 samples, 0.24%)</title><rect x="300.1" y="189" width="2.8" height="15.0" fill="rgb(183,183,52)" rx="2" ry="2" />
+<text  x="303.07" y="199.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_cpool_find (8 samples, 1.91%)</title><rect x="170.5" y="333" width="22.6" height="15.0" fill="rgb(223,223,67)" rx="2" ry="2" />
+<text  x="173.53" y="343.5" >l..</text>
+</g>
+<g >
+<title>libcurl.4.dylib`out_number (1 samples, 0.24%)</title><rect x="266.3" y="285" width="2.8" height="15.0" fill="rgb(180,180,51)" rx="2" ry="2" />
+<text  x="269.28" y="295.5" ></text>
+</g>
+<g >
+<title>libsystem_platform.dylib`_platform_memchr$VARIANT$Haswell (1 samples, 0.24%)</title><rect x="291.6" y="253" width="2.8" height="15.0" fill="rgb(214,214,64)" rx="2" ry="2" />
+<text  x="294.62" y="263.5" ></text>
+</g>
+<g >
+<title>libsystem_kernel.dylib`__sendto (30 samples, 7.16%)</title><rect x="314.2" y="77" width="84.4" height="15.0" fill="rgb(199,199,58)" rx="2" ry="2" />
+<text  x="317.15" y="87.5" >libsystem..</text>
+</g>
+<g >
+<title>libnghttp2.14.dylib`nghttp2_buf_free (1 samples, 0.24%)</title><rect x="1052.0" y="269" width="2.8" height="15.0" fill="rgb(213,213,63)" rx="2" ry="2" />
+<text  x="1055.00" y="279.5" ></text>
+</g>
+<g >
+<title>libnghttp2.14.dylib`hd_inflate_read_huff (1 samples, 0.24%)</title><rect x="1018.2" y="269" width="2.8" height="15.0" fill="rgb(189,189,55)" rx="2" ry="2" />
+<text  x="1021.21" y="279.5" ></text>
+</g>
+<g >
+<title>libsystem_pthread.dylib`___chkstk_darwin (1 samples, 0.24%)</title><rect x="514.1" y="317" width="2.8" height="15.0" fill="rgb(224,224,67)" rx="2" ry="2" />
+<text  x="517.11" y="327.5" ></text>
+</g>
+<g >
+<title>libsystem_platform.dylib`_platform_bzero$VARIANT$Haswell (1 samples, 0.24%)</title><rect x="418.4" y="125" width="2.8" height="15.0" fill="rgb(194,194,56)" rx="2" ry="2" />
+<text  x="421.35" y="135.5" ></text>
+</g>
+<g >
+<title>libnghttp2.14.dylib`nghttp2_session_mem_send_internal (2 samples, 0.48%)</title><rect x="553.5" y="301" width="5.7" height="15.0" fill="rgb(222,222,67)" rx="2" ry="2" />
+<text  x="556.53" y="311.5" ></text>
+</g>
+<g >
+<title>libnghttp2.14.dylib`nghttp2_session_mem_recv2 (136 samples, 32.46%)</title><rect x="671.8" y="301" width="383.0" height="15.0" fill="rgb(183,183,53)" rx="2" ry="2" />
+<text  x="674.81" y="311.5" >libnghttp2.14.dylib`nghttp2_session_mem_recv2</text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`_realloc (1 samples, 0.24%)</title><rect x="485.9" y="269" width="2.9" height="15.0" fill="rgb(224,224,67)" rx="2" ry="2" />
+<text  x="488.94" y="279.5" ></text>
+</g>
+<g >
+<title>libcrypto.3.dylib`bio_write_intern (31 samples, 7.40%)</title><rect x="311.3" y="125" width="87.3" height="15.0" fill="rgb(222,222,67)" rx="2" ry="2" />
+<text  x="314.34" y="135.5" >libcrypto...</text>
+</g>
+<g >
+<title>libcurl.4.dylib`nw_out_writer (44 samples, 10.50%)</title><rect x="300.1" y="237" width="123.9" height="15.0" fill="rgb(210,210,63)" rx="2" ry="2" />
+<text  x="303.07" y="247.5" >libcurl.4.dylib..</text>
+</g>
+<g >
+<title>libssl.3.dylib`tls_get_more_records (2 samples, 0.48%)</title><rect x="576.1" y="205" width="5.6" height="15.0" fill="rgb(182,182,52)" rx="2" ry="2" />
+<text  x="579.06" y="215.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`nw_out_flush (46 samples, 10.98%)</title><rect x="297.3" y="269" width="129.5" height="15.0" fill="rgb(204,204,60)" rx="2" ry="2" />
+<text  x="300.26" y="279.5" >libcurl.4.dylib`..</text>
+</g>
+<g >
+<title>libcurl.4.dylib`hostname_check (1 samples, 0.24%)</title><rect x="249.4" y="301" width="2.8" height="15.0" fill="rgb(229,229,69)" rx="2" ry="2" />
+<text  x="252.38" y="311.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`http_rw_hd (3 samples, 0.72%)</title><rect x="950.6" y="237" width="8.5" height="15.0" fill="rgb(217,217,65)" rx="2" ry="2" />
+<text  x="953.62" y="247.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_socket_check (21 samples, 5.01%)</title><rect x="1057.6" y="317" width="59.2" height="15.0" fill="rgb(225,225,68)" rx="2" ry="2" />
+<text  x="1060.64" y="327.5" >libcur..</text>
+</g>
+<g >
+<title>libcurl.4.dylib`ssl_cf_send (44 samples, 10.50%)</title><rect x="300.1" y="221" width="123.9" height="15.0" fill="rgb(199,199,58)" rx="2" ry="2" />
+<text  x="303.07" y="231.5" >libcurl.4.dylib..</text>
+</g>
+<g >
+<title>libcurl.4.dylib`&lt;deduplicated_symbol&gt; (1 samples, 0.24%)</title><rect x="525.4" y="333" width="2.8" height="15.0" fill="rgb(220,220,66)" rx="2" ry="2" />
+<text  x="528.37" y="343.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`cf_socket_query (1 samples, 0.24%)</title><rect x="542.3" y="317" width="2.8" height="15.0" fill="rgb(184,184,53)" rx="2" ry="2" />
+<text  x="545.27" y="327.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`cf_hc_data_pending (1 samples, 0.24%)</title><rect x="1054.8" y="349" width="2.8" height="15.0" fill="rgb(226,226,68)" rx="2" ry="2" />
+<text  x="1057.82" y="359.5" ></text>
+</g>
+<g >
+<title>libnghttp2.14.dylib`nghttp2_hd_huff_decode (1 samples, 0.24%)</title><rect x="1018.2" y="253" width="2.8" height="15.0" fill="rgb(177,177,50)" rx="2" ry="2" />
+<text  x="1021.21" y="263.5" ></text>
+</g>
+<g >
+<title>libsystem_kernel.dylib`fstat$INODE64 (6 samples, 1.43%)</title><rect x="911.2" y="77" width="16.9" height="15.0" fill="rgb(177,177,51)" rx="2" ry="2" />
+<text  x="914.19" y="87.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`formatf (6 samples, 1.43%)</title><rect x="474.7" y="317" width="16.9" height="15.0" fill="rgb(209,209,62)" rx="2" ry="2" />
+<text  x="477.68" y="327.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`ossl_bio_cf_out_write (31 samples, 7.40%)</title><rect x="311.3" y="93" width="87.3" height="15.0" fill="rgb(222,222,67)" rx="2" ry="2" />
+<text  x="314.34" y="103.5" >libcurl.4...</text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_xfer_write_resp (92 samples, 21.96%)</title><rect x="688.7" y="269" width="259.1" height="15.0" fill="rgb(181,181,52)" rx="2" ry="2" />
+<text  x="691.71" y="279.5" >libcurl.4.dylib`Curl_xfer_write_resp</text>
+</g>
+<g >
+<title>libsystem_c.dylib`clock_gettime_nsec_np (2 samples, 0.48%)</title><rect x="545.1" y="253" width="5.6" height="15.0" fill="rgb(188,188,54)" rx="2" ry="2" />
+<text  x="548.08" y="263.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`nw_in_reader (39 samples, 9.31%)</title><rect x="562.0" y="301" width="109.8" height="15.0" fill="rgb(215,215,64)" rx="2" ry="2" />
+<text  x="564.98" y="311.5" >libcurl.4.dyl..</text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`free_medium (5 samples, 1.19%)</title><rect x="136.7" y="365" width="14.1" height="15.0" fill="rgb(198,198,58)" rx="2" ry="2" />
+<text  x="139.73" y="375.5" ></text>
+</g>
+<g >
+<title>libsystem_pthread.dylib`_pthread_mutex_firstfit_unlock_slow (1 samples, 0.24%)</title><rect x="945.0" y="109" width="2.8" height="15.0" fill="rgb(175,175,50)" rx="2" ry="2" />
+<text  x="947.99" y="119.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`DYLD-STUB$$strchr (1 samples, 0.24%)</title><rect x="967.5" y="269" width="2.8" height="15.0" fill="rgb(177,177,50)" rx="2" ry="2" />
+<text  x="970.52" y="279.5" ></text>
+</g>
+<g >
+<title>curl`add_parallel_transfers (25 samples, 5.97%)</title><rect x="12.8" y="397" width="70.4" height="15.0" fill="rgb(227,227,69)" rx="2" ry="2" />
+<text  x="15.82" y="407.5" >curl`ad..</text>
+</g>
+<g >
+<title>libsystem_platform.dylib`_platform_memmove$VARIANT$Haswell (1 samples, 0.24%)</title><rect x="263.5" y="253" width="2.8" height="15.0" fill="rgb(227,227,69)" rx="2" ry="2" />
+<text  x="266.46" y="263.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_pgrsUpdate (2 samples, 0.48%)</title><rect x="497.2" y="365" width="5.6" height="15.0" fill="rgb(209,209,62)" rx="2" ry="2" />
+<text  x="500.21" y="375.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`nanov2_realloc (1 samples, 0.24%)</title><rect x="485.9" y="237" width="2.9" height="15.0" fill="rgb(224,224,67)" rx="2" ry="2" />
+<text  x="488.94" y="247.5" ></text>
+</g>
+<g >
+<title>libcrypto.3.dylib`EVP_EncryptUpdate (1 samples, 0.24%)</title><rect x="407.1" y="109" width="2.8" height="15.0" fill="rgb(181,181,52)" rx="2" ry="2" />
+<text  x="410.09" y="119.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`malloc_type_malloc (1 samples, 0.24%)</title><rect x="257.8" y="317" width="2.8" height="15.0" fill="rgb(203,203,60)" rx="2" ry="2" />
+<text  x="260.83" y="327.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curl_mvaprintf (2 samples, 0.48%)</title><rect x="528.2" y="333" width="5.6" height="15.0" fill="rgb(218,218,65)" rx="2" ry="2" />
+<text  x="531.19" y="343.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_connect (1 samples, 0.24%)</title><rect x="162.1" y="381" width="2.8" height="15.0" fill="rgb(205,205,61)" rx="2" ry="2" />
+<text  x="165.08" y="391.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`hds_cw_collect_write (2 samples, 0.48%)</title><rect x="992.9" y="205" width="5.6" height="15.0" fill="rgb(224,224,67)" rx="2" ry="2" />
+<text  x="995.86" y="215.5" ></text>
+</g>
+<g >
+<title>curl`tool_header_cb (3 samples, 0.72%)</title><rect x="984.4" y="141" width="8.5" height="15.0" fill="rgb(221,221,66)" rx="2" ry="2" />
+<text  x="987.42" y="151.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`formatf (6 samples, 1.43%)</title><rect x="457.8" y="317" width="16.9" height="15.0" fill="rgb(209,209,62)" rx="2" ry="2" />
+<text  x="460.78" y="327.5" ></text>
+</g>
+<g >
+<title>libssl.3.dylib`WPACKET_put_bytes__ (1 samples, 0.24%)</title><rect x="409.9" y="109" width="2.8" height="15.0" fill="rgb(217,217,65)" rx="2" ry="2" />
+<text  x="412.90" y="119.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_connect (36 samples, 8.59%)</title><rect x="170.5" y="365" width="101.4" height="15.0" fill="rgb(205,205,61)" rx="2" ry="2" />
+<text  x="173.53" y="375.5" >libcurl.4.dy..</text>
+</g>
+<g >
+<title>libcurl.4.dylib`multi_done (3 samples, 0.72%)</title><rect x="1119.6" y="365" width="8.4" height="15.0" fill="rgb(183,183,53)" rx="2" ry="2" />
+<text  x="1122.59" y="375.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_bufq_pass (45 samples, 10.74%)</title><rect x="297.3" y="253" width="126.7" height="15.0" fill="rgb(196,196,57)" rx="2" ry="2" />
+<text  x="300.26" y="263.5" >libcurl.4.dylib..</text>
+</g>
+<g >
+<title>libssl.3.dylib`wpacket_intern_close (1 samples, 0.24%)</title><rect x="412.7" y="109" width="2.8" height="15.0" fill="rgb(196,196,57)" rx="2" ry="2" />
+<text  x="415.72" y="119.5" ></text>
+</g>
+<g >
+<title>libssl.3.dylib`ssl3_read_internal (32 samples, 7.64%)</title><rect x="576.1" y="237" width="90.1" height="15.0" fill="rgb(198,198,58)" rx="2" ry="2" />
+<text  x="579.06" y="247.5" >libssl.3.d..</text>
+</g>
+<g >
+<title>libcurl.4.dylib`nw_out_writer (1 samples, 0.24%)</title><rect x="424.0" y="253" width="2.8" height="15.0" fill="rgb(210,210,63)" rx="2" ry="2" />
+<text  x="426.99" y="263.5" ></text>
+</g>
+<g >
+<title>libsystem_kernel.dylib`mach_absolute_time (1 samples, 0.24%)</title><rect x="1125.2" y="237" width="2.8" height="15.0" fill="rgb(218,218,65)" rx="2" ry="2" />
+<text  x="1128.23" y="247.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`ssl_cf_data_pending (21 samples, 5.01%)</title><rect x="1057.6" y="349" width="59.2" height="15.0" fill="rgb(202,202,59)" rx="2" ry="2" />
+<text  x="1060.64" y="359.5" >libcur..</text>
+</g>
+<g >
+<title>libsystem_c.dylib`__swhatbuf (1 samples, 0.24%)</title><rect x="899.9" y="77" width="2.8" height="15.0" fill="rgb(212,212,63)" rx="2" ry="2" />
+<text  x="902.93" y="87.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curlx_now (3 samples, 0.72%)</title><rect x="545.1" y="285" width="8.4" height="15.0" fill="rgb(195,195,57)" rx="2" ry="2" />
+<text  x="548.08" y="295.5" ></text>
+</g>
+<g >
+<title>curl`run_all_transfers (409 samples, 97.61%)</title><rect x="10.0" y="413" width="1151.8" height="15.0" fill="rgb(175,175,50)" rx="2" ry="2" />
+<text  x="13.00" y="423.5" >curl`run_all_transfers</text>
+</g>
+<g >
+<title>libcurl.4.dylib`formatf (2 samples, 0.48%)</title><rect x="528.2" y="317" width="5.6" height="15.0" fill="rgb(209,209,62)" rx="2" ry="2" />
+<text  x="531.19" y="327.5" ></text>
+</g>
+<g >
+<title>libnghttp2.14.dylib`nghttp2_frame_pack_headers (1 samples, 0.24%)</title><rect x="429.6" y="237" width="2.8" height="15.0" fill="rgb(209,209,62)" rx="2" ry="2" />
+<text  x="432.62" y="247.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_share_lock (1 samples, 0.24%)</title><rect x="519.7" y="349" width="2.9" height="15.0" fill="rgb(183,183,52)" rx="2" ry="2" />
+<text  x="522.74" y="359.5" ></text>
+</g>
+<g >
+<title>libnghttp2.14.dylib`session_inbound_frame_reset (1 samples, 0.24%)</title><rect x="1052.0" y="285" width="2.8" height="15.0" fill="rgb(187,187,54)" rx="2" ry="2" />
+<text  x="1055.00" y="295.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_hash_pick (1 samples, 0.24%)</title><rect x="170.5" y="317" width="2.8" height="15.0" fill="rgb(216,216,64)" rx="2" ry="2" />
+<text  x="173.53" y="327.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`cw_out_do_write (3 samples, 0.72%)</title><rect x="984.4" y="173" width="8.5" height="15.0" fill="rgb(189,189,55)" rx="2" ry="2" />
+<text  x="987.42" y="183.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curl_url_get (8 samples, 1.91%)</title><rect x="221.2" y="349" width="22.5" height="15.0" fill="rgb(196,196,57)" rx="2" ry="2" />
+<text  x="224.22" y="359.5" >l..</text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`malloc_type_malloc (1 samples, 0.24%)</title><rect x="38.2" y="285" width="2.8" height="15.0" fill="rgb(203,203,60)" rx="2" ry="2" />
+<text  x="41.16" y="295.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_pgrsDone (1 samples, 0.24%)</title><rect x="1125.2" y="349" width="2.8" height="15.0" fill="rgb(185,185,53)" rx="2" ry="2" />
+<text  x="1128.23" y="359.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_memdup0 (1 samples, 0.24%)</title><rect x="224.0" y="333" width="2.8" height="15.0" fill="rgb(175,175,50)" rx="2" ry="2" />
+<text  x="227.03" y="343.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curl_strequal (3 samples, 0.72%)</title><rect x="984.4" y="109" width="8.5" height="15.0" fill="rgb(228,228,69)" rx="2" ry="2" />
+<text  x="987.42" y="119.5" ></text>
+</g>
+<g >
+<title>curl`tool_setopt (3 samples, 0.72%)</title><rect x="32.5" y="349" width="8.5" height="15.0" fill="rgb(207,207,61)" rx="2" ry="2" />
+<text  x="35.53" y="359.5" ></text>
+</g>
+<g >
+<title>libsystem_kernel.dylib`open$NOCANCEL (1 samples, 0.24%)</title><rect x="894.3" y="109" width="2.8" height="15.0" fill="rgb(220,220,66)" rx="2" ry="2" />
+<text  x="897.30" y="119.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`mvm_madvise_free_plat (5 samples, 1.19%)</title><rect x="136.7" y="333" width="14.1" height="15.0" fill="rgb(179,179,51)" rx="2" ry="2" />
+<text  x="139.73" y="343.5" ></text>
+</g>
+<g >
+<title>curl`writeLong (4 samples, 0.95%)</title><rect x="86.0" y="365" width="11.3" height="15.0" fill="rgb(218,218,65)" rx="2" ry="2" />
+<text  x="89.04" y="375.5" ></text>
+</g>
+<g >
+<title>libsystem_c.dylib`fclose (8 samples, 1.91%)</title><rect x="128.3" y="381" width="22.5" height="15.0" fill="rgb(186,186,54)" rx="2" ry="2" />
+<text  x="131.28" y="391.5" >l..</text>
+</g>
+<g >
+<title>libsystem_kernel.dylib`poll (20 samples, 4.77%)</title><rect x="1060.5" y="301" width="56.3" height="15.0" fill="rgb(210,210,62)" rx="2" ry="2" />
+<text  x="1063.45" y="311.5" >libsy..</text>
+</g>
+<g >
+<title>libcrypto.3.dylib`EVP_CIPHER_CTX_get_block_size (1 samples, 0.24%)</title><rect x="404.3" y="93" width="2.8" height="15.0" fill="rgb(199,199,58)" rx="2" ry="2" />
+<text  x="407.27" y="103.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`url_match_ssl_config (2 samples, 0.48%)</title><rect x="187.4" y="301" width="5.7" height="15.0" fill="rgb(183,183,52)" rx="2" ry="2" />
+<text  x="190.42" y="311.5" ></text>
+</g>
+<g >
+<title>libsystem_platform.dylib`os_unfair_lock_lock_with_options (1 samples, 0.24%)</title><rect x="218.4" y="333" width="2.8" height="15.0" fill="rgb(177,177,50)" rx="2" ry="2" />
+<text  x="221.40" y="343.5" ></text>
+</g>
+<g >
+<title>libsystem_kernel.dylib`_mach_continuous_time (1 samples, 0.24%)</title><rect x="207.1" y="253" width="2.9" height="15.0" fill="rgb(200,200,59)" rx="2" ry="2" />
+<text  x="210.14" y="263.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`cw_out_write (1 samples, 0.24%)</title><rect x="956.3" y="173" width="2.8" height="15.0" fill="rgb(218,218,65)" rx="2" ry="2" />
+<text  x="959.25" y="183.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`tiny_malloc_from_free_list (1 samples, 0.24%)</title><rect x="438.1" y="237" width="2.8" height="15.0" fill="rgb(212,212,63)" rx="2" ry="2" />
+<text  x="441.07" y="247.5" ></text>
+</g>
+<g >
+<title>libsystem_platform.dylib`_platform_memmove$VARIANT$Haswell (1 samples, 0.24%)</title><rect x="505.7" y="317" width="2.8" height="15.0" fill="rgb(227,227,69)" rx="2" ry="2" />
+<text  x="508.66" y="327.5" ></text>
+</g>
+<g >
+<title>curl`post_per_transfer (27 samples, 6.44%)</title><rect x="83.2" y="397" width="76.1" height="15.0" fill="rgb(200,200,59)" rx="2" ry="2" />
+<text  x="86.22" y="407.5" >curl`pos..</text>
+</g>
+<g >
+<title>libcurl.4.dylib`setopt_cptr (2 samples, 0.48%)</title><rect x="35.3" y="317" width="5.7" height="15.0" fill="rgb(214,214,64)" rx="2" ry="2" />
+<text  x="38.35" y="327.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`small_malloc_should_clear (3 samples, 0.72%)</title><rect x="72.0" y="317" width="8.4" height="15.0" fill="rgb(229,229,69)" rx="2" ry="2" />
+<text  x="74.96" y="327.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`_realloc (1 samples, 0.24%)</title><rect x="240.9" y="301" width="2.8" height="15.0" fill="rgb(224,224,67)" rx="2" ry="2" />
+<text  x="243.93" y="311.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`formatf (1 samples, 0.24%)</title><rect x="970.3" y="253" width="2.9" height="15.0" fill="rgb(209,209,62)" rx="2" ry="2" />
+<text  x="973.33" y="263.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_http_write_resp_hd (3 samples, 0.72%)</title><rect x="950.6" y="253" width="8.5" height="15.0" fill="rgb(178,178,51)" rx="2" ry="2" />
+<text  x="953.62" y="263.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_req_send (64 samples, 15.27%)</title><rect x="277.5" y="349" width="180.3" height="15.0" fill="rgb(188,188,54)" rx="2" ry="2" />
+<text  x="280.54" y="359.5" >libcurl.4.dylib`Curl_re..</text>
+</g>
+<g >
+<title>libcurl.4.dylib`cw_out_ptr_flush (3 samples, 0.72%)</title><rect x="984.4" y="157" width="8.5" height="15.0" fill="rgb(202,202,60)" rx="2" ry="2" />
+<text  x="987.42" y="167.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_uint_hash_get (1 samples, 0.24%)</title><rect x="964.7" y="269" width="2.8" height="15.0" fill="rgb(224,224,67)" rx="2" ry="2" />
+<text  x="967.70" y="279.5" ></text>
+</g>
+<g >
+<title>libnghttp2.14.dylib`nghttp2_hd_deflate_hd_bufs (1 samples, 0.24%)</title><rect x="429.6" y="221" width="2.8" height="15.0" fill="rgb(225,225,68)" rx="2" ry="2" />
+<text  x="432.62" y="231.5" ></text>
+</g>
+<g >
+<title>libsystem_kernel.dylib`mach_timebase_info (2 samples, 0.48%)</title><rect x="545.1" y="237" width="5.6" height="15.0" fill="rgb(223,223,67)" rx="2" ry="2" />
+<text  x="548.08" y="247.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_uint_hash_remove (1 samples, 0.24%)</title><rect x="1122.4" y="317" width="2.8" height="15.0" fill="rgb(216,216,64)" rx="2" ry="2" />
+<text  x="1125.41" y="327.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`cf_socket_recv (3 samples, 0.72%)</title><rect x="598.6" y="93" width="8.4" height="15.0" fill="rgb(201,201,59)" rx="2" ry="2" />
+<text  x="601.59" y="103.5" ></text>
+</g>
+<g >
+<title>libssl.3.dylib`tls_write_records (8 samples, 1.91%)</title><rect x="398.6" y="157" width="22.6" height="15.0" fill="rgb(188,188,54)" rx="2" ry="2" />
+<text  x="401.64" y="167.5" >l..</text>
+</g>
+<g >
+<title>libsystem_platform.dylib`_platform_bzero$VARIANT$Haswell (2 samples, 0.48%)</title><rect x="74.8" y="301" width="5.6" height="15.0" fill="rgb(194,194,56)" rx="2" ry="2" />
+<text  x="77.77" y="311.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_ssl_conn_config_cleanup (1 samples, 0.24%)</title><rect x="195.9" y="333" width="2.8" height="15.0" fill="rgb(195,195,57)" rx="2" ry="2" />
+<text  x="198.87" y="343.5" ></text>
+</g>
+<g >
+<title>libnghttp2.14.dylib`nghttp2_session_want_read (1 samples, 0.24%)</title><rect x="455.0" y="301" width="2.8" height="15.0" fill="rgb(191,191,56)" rx="2" ry="2" />
+<text  x="457.96" y="311.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`nanov2_malloc_type (1 samples, 0.24%)</title><rect x="255.0" y="301" width="2.8" height="15.0" fill="rgb(184,184,53)" rx="2" ry="2" />
+<text  x="258.01" y="311.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curlx_dyn_addf (6 samples, 1.43%)</title><rect x="474.7" y="349" width="16.9" height="15.0" fill="rgb(213,213,64)" rx="2" ry="2" />
+<text  x="477.68" y="359.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`cf_h2_recv (178 samples, 42.48%)</title><rect x="553.5" y="349" width="501.3" height="15.0" fill="rgb(198,198,58)" rx="2" ry="2" />
+<text  x="556.53" y="359.5" >libcurl.4.dylib`cf_h2_recv</text>
+</g>
+<g >
+<title>libcurl.4.dylib`curl_multi_perform (345 samples, 82.34%)</title><rect x="159.3" y="397" width="971.6" height="15.0" fill="rgb(188,188,54)" rx="2" ry="2" />
+<text  x="162.26" y="407.5" >libcurl.4.dylib`curl_multi_perform</text>
+</g>
+<g >
+<title>libnghttp2.14.dylib`submit_headers_shared_nva (4 samples, 0.95%)</title><rect x="443.7" y="269" width="11.3" height="15.0" fill="rgb(223,223,67)" rx="2" ry="2" />
+<text  x="446.70" y="279.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curlx_dyn_addn (1 samples, 0.24%)</title><rect x="685.9" y="285" width="2.8" height="15.0" fill="rgb(212,212,63)" rx="2" ry="2" />
+<text  x="688.89" y="295.5" ></text>
+</g>
+<g >
+<title>curl`proto_token (1 samples, 0.24%)</title><rect x="956.3" y="109" width="2.8" height="15.0" fill="rgb(209,209,62)" rx="2" ry="2" />
+<text  x="959.25" y="119.5" ></text>
+</g>
+<g >
+<title>libnghttp2.14.dylib`nghttp2_session_send (2 samples, 0.48%)</title><rect x="553.5" y="317" width="5.7" height="15.0" fill="rgb(223,223,67)" rx="2" ry="2" />
+<text  x="556.53" y="327.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_pretransfer (11 samples, 2.63%)</title><rect x="502.8" y="365" width="31.0" height="15.0" fill="rgb(197,197,58)" rx="2" ry="2" />
+<text  x="505.84" y="375.5" >li..</text>
+</g>
+<g >
+<title>libcurl.4.dylib`progress_calc (1 samples, 0.24%)</title><rect x="500.0" y="349" width="2.8" height="15.0" fill="rgb(228,228,69)" rx="2" ry="2" />
+<text  x="503.02" y="359.5" ></text>
+</g>
+<g >
+<title>libcrypto.3.dylib`aesni_ctr32_ghash_6x (9 samples, 2.15%)</title><rect x="1161.8" y="461" width="25.4" height="15.0" fill="rgb(218,218,65)" rx="2" ry="2" />
+<text  x="1164.84" y="471.5" >l..</text>
+</g>
+<g >
+<title>libsystem_c.dylib`strdup (1 samples, 0.24%)</title><rect x="243.7" y="333" width="2.9" height="15.0" fill="rgb(191,191,56)" rx="2" ry="2" />
+<text  x="246.75" y="343.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`url_match_multiplex_limits (1 samples, 0.24%)</title><rect x="184.6" y="301" width="2.8" height="15.0" fill="rgb(203,203,60)" rx="2" ry="2" />
+<text  x="187.61" y="311.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_strntoupper (1 samples, 0.24%)</title><rect x="210.0" y="349" width="2.8" height="15.0" fill="rgb(229,229,69)" rx="2" ry="2" />
+<text  x="212.95" y="359.5" ></text>
+</g>
+<g >
+<title>libsystem_platform.dylib`_platform_bzero$VARIANT$Haswell (1 samples, 0.24%)</title><rect x="108.6" y="333" width="2.8" height="15.0" fill="rgb(194,194,56)" rx="2" ry="2" />
+<text  x="111.57" y="343.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curlx_dyn_addn (2 samples, 0.48%)</title><rect x="483.1" y="285" width="5.7" height="15.0" fill="rgb(212,212,63)" rx="2" ry="2" />
+<text  x="486.13" y="295.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`dnscache_entry_dtor (1 samples, 0.24%)</title><rect x="516.9" y="333" width="2.8" height="15.0" fill="rgb(226,226,68)" rx="2" ry="2" />
+<text  x="519.92" y="343.5" ></text>
+</g>
+<g >
+<title>libsystem_c.dylib`clock_gettime_nsec_np (1 samples, 0.24%)</title><rect x="207.1" y="285" width="2.9" height="15.0" fill="rgb(188,188,54)" rx="2" ry="2" />
+<text  x="210.14" y="295.5" ></text>
+</g>
+<g >
+<title>libsystem_kernel.dylib`__sigaction (6 samples, 1.43%)</title><rect x="111.4" y="365" width="16.9" height="15.0" fill="rgb(210,210,62)" rx="2" ry="2" />
+<text  x="114.38" y="375.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`out_number (1 samples, 0.24%)</title><rect x="55.1" y="253" width="2.8" height="15.0" fill="rgb(180,180,51)" rx="2" ry="2" />
+<text  x="58.06" y="263.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_timestrcmp (1 samples, 0.24%)</title><rect x="190.2" y="285" width="2.9" height="15.0" fill="rgb(193,193,56)" rx="2" ry="2" />
+<text  x="193.24" y="295.5" ></text>
+</g>
+<g >
+<title>libcrypto.3.dylib`OPENSSL_init_crypto (1 samples, 0.24%)</title><rect x="300.1" y="157" width="2.8" height="15.0" fill="rgb(219,219,66)" rx="2" ry="2" />
+<text  x="303.07" y="167.5" ></text>
+</g>
+<g >
+<title>libsystem_kernel.dylib`__exit (1 samples, 0.24%)</title><rect x="1187.2" y="461" width="2.8" height="15.0" fill="rgb(213,213,64)" rx="2" ry="2" />
+<text  x="1190.18" y="471.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`cw_download_write (92 samples, 21.96%)</title><rect x="688.7" y="237" width="259.1" height="15.0" fill="rgb(210,210,63)" rx="2" ry="2" />
+<text  x="691.71" y="247.5" >libcurl.4.dylib`cw_download_write</text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`szone_malloc_should_clear (3 samples, 0.72%)</title><rect x="72.0" y="333" width="8.4" height="15.0" fill="rgb(182,182,52)" rx="2" ry="2" />
+<text  x="74.96" y="343.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curlx_dyn_addn (2 samples, 0.48%)</title><rect x="528.2" y="285" width="5.6" height="15.0" fill="rgb(212,212,63)" rx="2" ry="2" />
+<text  x="531.19" y="295.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`nanov2_malloc (1 samples, 0.24%)</title><rect x="485.9" y="221" width="2.9" height="15.0" fill="rgb(207,207,61)" rx="2" ry="2" />
+<text  x="488.94" y="231.5" ></text>
+</g>
+<g >
+<title>libsystem_c.dylib`strcspn (1 samples, 0.24%)</title><rect x="252.2" y="301" width="2.8" height="15.0" fill="rgb(201,201,59)" rx="2" ry="2" />
+<text  x="255.20" y="311.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_client_write (7 samples, 1.67%)</title><rect x="978.8" y="221" width="19.7" height="15.0" fill="rgb(196,196,57)" rx="2" ry="2" />
+<text  x="981.78" y="231.5" ></text>
+</g>
+<g >
+<title>libnghttp2.14.dylib`nghttp2_outbound_item_init (1 samples, 0.24%)</title><rect x="440.9" y="269" width="2.8" height="15.0" fill="rgb(211,211,63)" rx="2" ry="2" />
+<text  x="443.88" y="279.5" ></text>
+</g>
+<g >
+<title>libssl.3.dylib`tls_get_more_records (30 samples, 7.16%)</title><rect x="581.7" y="189" width="84.5" height="15.0" fill="rgb(182,182,52)" rx="2" ry="2" />
+<text  x="584.69" y="199.5" >libssl.3...</text>
+</g>
+<g >
+<title>libsystem_platform.dylib`_platform_bzero$VARIANT$Haswell (1 samples, 0.24%)</title><rect x="1029.5" y="269" width="2.8" height="15.0" fill="rgb(194,194,56)" rx="2" ry="2" />
+<text  x="1032.47" y="279.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`ssl_cf_data_pending (9 samples, 2.15%)</title><rect x="1130.9" y="349" width="25.3" height="15.0" fill="rgb(202,202,59)" rx="2" ry="2" />
+<text  x="1133.86" y="359.5" >l..</text>
+</g>
+<g >
+<title>curl`config2setopts (18 samples, 4.30%)</title><rect x="12.8" y="365" width="50.7" height="15.0" fill="rgb(217,217,65)" rx="2" ry="2" />
+<text  x="15.82" y="375.5" >curl`..</text>
+</g>
+<g >
+<title>libnghttp2.14.dylib`nghttp2_should_send_window_update (1 samples, 0.24%)</title><rect x="947.8" y="253" width="2.8" height="15.0" fill="rgb(206,206,61)" rx="2" ry="2" />
+<text  x="950.80" y="263.5" ></text>
+</g>
+<g >
+<title>libssl.3.dylib`tls_retry_write_records (31 samples, 7.40%)</title><rect x="311.3" y="157" width="87.3" height="15.0" fill="rgb(221,221,66)" rx="2" ry="2" />
+<text  x="314.34" y="167.5" >libssl.3.d..</text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`nanov2_calloc_type (2 samples, 0.48%)</title><rect x="992.9" y="173" width="5.6" height="15.0" fill="rgb(200,200,59)" rx="2" ry="2" />
+<text  x="995.86" y="183.5" ></text>
+</g>
+<g >
+<title>curl`setup_outfile (2 samples, 0.48%)</title><rect x="66.3" y="365" width="5.7" height="15.0" fill="rgb(187,187,54)" rx="2" ry="2" />
+<text  x="69.32" y="375.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`http_req_set_reader (2 samples, 0.48%)</title><rect x="491.6" y="349" width="5.6" height="15.0" fill="rgb(212,212,63)" rx="2" ry="2" />
+<text  x="494.58" y="359.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`h2_xfer_write_resp_hd (3 samples, 0.72%)</title><rect x="950.6" y="269" width="8.5" height="15.0" fill="rgb(177,177,50)" rx="2" ry="2" />
+<text  x="953.62" y="279.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`parseurl_and_replace (6 samples, 1.43%)</title><rect x="246.6" y="333" width="16.9" height="15.0" fill="rgb(199,199,58)" rx="2" ry="2" />
+<text  x="249.56" y="343.5" ></text>
+</g>
+<g >
+<title>libssl.3.dylib`tls_post_encryption_processing_default (2 samples, 0.48%)</title><rect x="412.7" y="125" width="5.7" height="15.0" fill="rgb(189,189,55)" rx="2" ry="2" />
+<text  x="415.72" y="135.5" ></text>
+</g>
+<g >
+<title>libnghttp2.14.dylib`nghttp2_get_uint32 (1 samples, 0.24%)</title><rect x="1009.8" y="285" width="2.8" height="15.0" fill="rgb(195,195,57)" rx="2" ry="2" />
+<text  x="1012.76" y="295.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curlx_dyn_addn (1 samples, 0.24%)</title><rect x="266.3" y="253" width="2.8" height="15.0" fill="rgb(212,212,63)" rx="2" ry="2" />
+<text  x="269.28" y="263.5" ></text>
+</g>
+<g >
+<title>libsystem_c.dylib`strcspn (1 samples, 0.24%)</title><rect x="249.4" y="285" width="2.8" height="15.0" fill="rgb(201,201,59)" rx="2" ry="2" />
+<text  x="252.38" y="295.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`cf_he_query (1 samples, 0.24%)</title><rect x="539.5" y="317" width="2.8" height="15.0" fill="rgb(204,204,60)" rx="2" ry="2" />
+<text  x="542.45" y="327.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`_nanov2_free (1 samples, 0.24%)</title><rect x="953.4" y="205" width="2.9" height="15.0" fill="rgb(227,227,69)" rx="2" ry="2" />
+<text  x="956.44" y="215.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_setstropt (1 samples, 0.24%)</title><rect x="38.2" y="301" width="2.8" height="15.0" fill="rgb(211,211,63)" rx="2" ry="2" />
+<text  x="41.16" y="311.5" ></text>
+</g>
+<g >
+<title>libnghttp2.14.dylib`nghttp2_bufs_add (1 samples, 0.24%)</title><rect x="429.6" y="189" width="2.8" height="15.0" fill="rgb(200,200,59)" rx="2" ry="2" />
+<text  x="432.62" y="199.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`set_login (1 samples, 0.24%)</title><rect x="243.7" y="349" width="2.9" height="15.0" fill="rgb(181,181,52)" rx="2" ry="2" />
+<text  x="246.75" y="359.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`alloc_addbyter (1 samples, 0.24%)</title><rect x="266.3" y="269" width="2.8" height="15.0" fill="rgb(196,196,57)" rx="2" ry="2" />
+<text  x="269.28" y="279.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curl_maprintf (4 samples, 0.95%)</title><rect x="522.6" y="349" width="11.2" height="15.0" fill="rgb(177,177,50)" rx="2" ry="2" />
+<text  x="525.55" y="359.5" ></text>
+</g>
+<g >
+<title>libsystem_kernel.dylib`mach_continuous_time (1 samples, 0.24%)</title><rect x="497.2" y="301" width="2.8" height="15.0" fill="rgb(215,215,64)" rx="2" ry="2" />
+<text  x="500.21" y="311.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`cw_out_do_write (90 samples, 21.48%)</title><rect x="694.3" y="189" width="253.5" height="15.0" fill="rgb(189,189,55)" rx="2" ry="2" />
+<text  x="697.34" y="199.5" >libcurl.4.dylib`cw_out_do_write</text>
+</g>
+<g >
+<title>libcurl.4.dylib`parse_authority (2 samples, 0.48%)</title><rect x="249.4" y="317" width="5.6" height="15.0" fill="rgb(198,198,58)" rx="2" ry="2" />
+<text  x="252.38" y="327.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`h2_xfer_write_resp_hd (12 samples, 2.86%)</title><rect x="973.2" y="269" width="33.7" height="15.0" fill="rgb(177,177,50)" rx="2" ry="2" />
+<text  x="976.15" y="279.5" >li..</text>
+</g>
+<g >
+<title>libsystem_platform.dylib`_platform_memmove$VARIANT$Haswell (2 samples, 0.48%)</title><rect x="449.3" y="237" width="5.7" height="15.0" fill="rgb(227,227,69)" rx="2" ry="2" />
+<text  x="452.33" y="247.5" ></text>
+</g>
+<g >
+<title>libssl.3.dylib`tls_write_records_default (8 samples, 1.91%)</title><rect x="398.6" y="141" width="22.6" height="15.0" fill="rgb(187,187,54)" rx="2" ry="2" />
+<text  x="401.64" y="151.5" >l..</text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_hash_delete (1 samples, 0.24%)</title><rect x="508.5" y="333" width="2.8" height="15.0" fill="rgb(196,196,57)" rx="2" ry="2" />
+<text  x="511.47" y="343.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_get_scheme_handler (1 samples, 0.24%)</title><rect x="246.6" y="317" width="2.8" height="15.0" fill="rgb(227,227,68)" rx="2" ry="2" />
+<text  x="249.56" y="327.5" ></text>
+</g>
+<g >
+<title>curl`create_transfer (24 samples, 5.73%)</title><rect x="12.8" y="381" width="67.6" height="15.0" fill="rgb(202,202,59)" rx="2" ry="2" />
+<text  x="15.82" y="391.5" >curl`cr..</text>
+</g>
+<g >
+<title>libsystem_kernel.dylib`__open_nocancel (67 samples, 15.99%)</title><rect x="705.6" y="109" width="188.7" height="15.0" fill="rgb(206,206,61)" rx="2" ry="2" />
+<text  x="708.61" y="119.5" >libsystem_kernel.dylib`_..</text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_loadhostpairs (6 samples, 1.43%)</title><rect x="502.8" y="349" width="16.9" height="15.0" fill="rgb(197,197,58)" rx="2" ry="2" />
+<text  x="505.84" y="359.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curlx_dyn_vprintf (6 samples, 1.43%)</title><rect x="474.7" y="333" width="16.9" height="15.0" fill="rgb(222,222,67)" rx="2" ry="2" />
+<text  x="477.68" y="343.5" ></text>
+</g>
+<g >
+<title>libsystem_kernel.dylib`mach_absolute_time (1 samples, 0.24%)</title><rect x="497.2" y="269" width="2.8" height="15.0" fill="rgb(218,218,65)" rx="2" ry="2" />
+<text  x="500.21" y="279.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`alloc_addbyter (2 samples, 0.48%)</title><rect x="528.2" y="301" width="5.6" height="15.0" fill="rgb(196,196,57)" rx="2" ry="2" />
+<text  x="531.19" y="311.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`set_url (4 samples, 0.95%)</title><rect x="52.2" y="349" width="11.3" height="15.0" fill="rgb(213,213,63)" rx="2" ry="2" />
+<text  x="55.24" y="359.5" ></text>
+</g>
+<g >
+<title>curl`dyn_nappend (1 samples, 0.24%)</title><rect x="66.3" y="333" width="2.8" height="15.0" fill="rgb(190,190,55)" rx="2" ry="2" />
+<text  x="69.32" y="343.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curl_strnequal (1 samples, 0.24%)</title><rect x="246.6" y="301" width="2.8" height="15.0" fill="rgb(217,217,65)" rx="2" ry="2" />
+<text  x="249.56" y="311.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_cwriter_get_by_type (1 samples, 0.24%)</title><rect x="688.7" y="205" width="2.8" height="15.0" fill="rgb(181,181,52)" rx="2" ry="2" />
+<text  x="691.71" y="215.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_freeaddrinfo (1 samples, 0.24%)</title><rect x="508.5" y="301" width="2.8" height="15.0" fill="rgb(204,204,60)" rx="2" ry="2" />
+<text  x="511.47" y="311.5" ></text>
+</g>
+<g >
+<title>libsystem_kernel.dylib`mach_continuous_time (1 samples, 0.24%)</title><rect x="1125.2" y="269" width="2.8" height="15.0" fill="rgb(215,215,64)" rx="2" ry="2" />
+<text  x="1128.23" y="279.5" ></text>
+</g>
+<g >
+<title>libsystem_c.dylib`funlockfile (1 samples, 0.24%)</title><rect x="91.7" y="269" width="2.8" height="15.0" fill="rgb(187,187,54)" rx="2" ry="2" />
+<text  x="94.67" y="279.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curl_maprintf (2 samples, 0.48%)</title><rect x="226.8" y="333" width="5.7" height="15.0" fill="rgb(177,177,50)" rx="2" ry="2" />
+<text  x="229.85" y="343.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_sendrecv (207 samples, 49.40%)</title><rect x="533.8" y="365" width="583.0" height="15.0" fill="rgb(179,179,51)" rx="2" ry="2" />
+<text  x="536.82" y="375.5" >libcurl.4.dylib`Curl_sendrecv</text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`free_tiny (1 samples, 0.24%)</title><rect x="432.4" y="221" width="2.9" height="15.0" fill="rgb(221,221,66)" rx="2" ry="2" />
+<text  x="435.43" y="231.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`cf_h2_query (1 samples, 0.24%)</title><rect x="536.6" y="317" width="2.9" height="15.0" fill="rgb(181,181,52)" rx="2" ry="2" />
+<text  x="539.63" y="327.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`cf_hc_query (1 samples, 0.24%)</title><rect x="184.6" y="285" width="2.8" height="15.0" fill="rgb(218,218,65)" rx="2" ry="2" />
+<text  x="187.61" y="295.5" ></text>
+</g>
+<g >
+<title>libsystem_platform.dylib`_platform_memmove$VARIANT$Haswell (1 samples, 0.24%)</title><rect x="429.6" y="173" width="2.8" height="15.0" fill="rgb(227,227,69)" rx="2" ry="2" />
+<text  x="432.62" y="183.5" ></text>
+</g>
+<g >
+<title>libssl.3.dylib`tls_get_max_records (1 samples, 0.24%)</title><rect x="305.7" y="157" width="2.8" height="15.0" fill="rgb(186,186,54)" rx="2" ry="2" />
+<text  x="308.70" y="167.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curl_mfprintf (3 samples, 0.72%)</title><rect x="88.9" y="349" width="8.4" height="15.0" fill="rgb(196,196,57)" rx="2" ry="2" />
+<text  x="91.85" y="359.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_speedcheck (1 samples, 0.24%)</title><rect x="1116.8" y="365" width="2.8" height="15.0" fill="rgb(213,213,63)" rx="2" ry="2" />
+<text  x="1119.78" y="375.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curl_strnequal (1 samples, 0.24%)</title><rect x="1001.3" y="221" width="2.8" height="15.0" fill="rgb(217,217,65)" rx="2" ry="2" />
+<text  x="1004.31" y="231.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`free (1 samples, 0.24%)</title><rect x="60.7" y="333" width="2.8" height="15.0" fill="rgb(203,203,60)" rx="2" ry="2" />
+<text  x="63.69" y="343.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`dnscache_entry_dtor (1 samples, 0.24%)</title><rect x="508.5" y="317" width="2.8" height="15.0" fill="rgb(226,226,68)" rx="2" ry="2" />
+<text  x="511.47" y="327.5" ></text>
+</g>
+<g >
+<title>curl`ourWriteOut (5 samples, 1.19%)</title><rect x="83.2" y="381" width="14.1" height="15.0" fill="rgb(181,181,52)" rx="2" ry="2" />
+<text  x="86.22" y="391.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_req_send_more (6 samples, 1.43%)</title><rect x="536.6" y="349" width="16.9" height="15.0" fill="rgb(217,217,65)" rx="2" ry="2" />
+<text  x="539.63" y="359.5" ></text>
+</g>
+<g >
+<title>libsystem_kernel.dylib`__error (1 samples, 0.24%)</title><rect x="421.2" y="157" width="2.8" height="15.0" fill="rgb(187,187,54)" rx="2" ry="2" />
+<text  x="424.17" y="167.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`out_number (2 samples, 0.48%)</title><rect x="91.7" y="317" width="5.6" height="15.0" fill="rgb(180,180,51)" rx="2" ry="2" />
+<text  x="94.67" y="327.5" ></text>
+</g>
+<g >
+<title>curl`proto_token (3 samples, 0.72%)</title><rect x="984.4" y="125" width="8.5" height="15.0" fill="rgb(209,209,62)" rx="2" ry="2" />
+<text  x="987.42" y="135.5" ></text>
+</g>
+<g >
+<title>libsystem_platform.dylib`_platform_memmove$VARIANT$Haswell (5 samples, 1.19%)</title><rect x="930.9" y="109" width="14.1" height="15.0" fill="rgb(227,227,69)" rx="2" ry="2" />
+<text  x="933.91" y="119.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`cf_socket_data_pending (21 samples, 5.01%)</title><rect x="1057.6" y="333" width="59.2" height="15.0" fill="rgb(192,192,56)" rx="2" ry="2" />
+<text  x="1060.64" y="343.5" >libcur..</text>
+</g>
+<g >
+<title>libsystem_c.dylib`__findenv_locked (1 samples, 0.24%)</title><rect x="18.4" y="301" width="2.9" height="15.0" fill="rgb(191,191,55)" rx="2" ry="2" />
+<text  x="21.45" y="311.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`nanov2_malloc_type (1 samples, 0.24%)</title><rect x="57.9" y="301" width="2.8" height="15.0" fill="rgb(184,184,53)" rx="2" ry="2" />
+<text  x="60.88" y="311.5" ></text>
+</g>
+<g >
+<title>libsystem_kernel.dylib`poll (4 samples, 0.95%)</title><rect x="173.3" y="253" width="11.3" height="15.0" fill="rgb(210,210,62)" rx="2" ry="2" />
+<text  x="176.34" y="263.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`cf_h2_is_alive (4 samples, 0.95%)</title><rect x="173.3" y="285" width="11.3" height="15.0" fill="rgb(186,186,54)" rx="2" ry="2" />
+<text  x="176.34" y="295.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`cw_out_write (91 samples, 21.72%)</title><rect x="691.5" y="205" width="256.3" height="15.0" fill="rgb(218,218,65)" rx="2" ry="2" />
+<text  x="694.53" y="215.5" >libcurl.4.dylib`cw_out_write</text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`nanov2_calloc_type (1 samples, 0.24%)</title><rect x="283.2" y="253" width="2.8" height="15.0" fill="rgb(200,200,59)" rx="2" ry="2" />
+<text  x="286.17" y="263.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`alloc_addbyter (1 samples, 0.24%)</title><rect x="55.1" y="237" width="2.8" height="15.0" fill="rgb(196,196,57)" rx="2" ry="2" />
+<text  x="58.06" y="247.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`url_match_conn (7 samples, 1.67%)</title><rect x="173.3" y="317" width="19.8" height="15.0" fill="rgb(226,226,68)" rx="2" ry="2" />
+<text  x="176.34" y="327.5" ></text>
+</g>
+<g >
+<title>libnghttp2.14.dylib`nghttp2_submit_request (5 samples, 1.19%)</title><rect x="440.9" y="285" width="14.1" height="15.0" fill="rgb(229,229,69)" rx="2" ry="2" />
+<text  x="443.88" y="295.5" ></text>
+</g>
+<g >
+<title>curl`tool_create_output_file (72 samples, 17.18%)</title><rect x="694.3" y="141" width="202.8" height="15.0" fill="rgb(220,220,66)" rx="2" ry="2" />
+<text  x="697.34" y="151.5" >curl`tool_create_output_file</text>
+</g>
+<g >
+<title>libssl.3.dylib`ssl_read_internal (1 samples, 0.24%)</title><rect x="666.2" y="253" width="2.8" height="15.0" fill="rgb(176,176,50)" rx="2" ry="2" />
+<text  x="669.18" y="263.5" ></text>
+</g>
+<g >
+<title>libcrypto.3.dylib`CRYPTO_free (1 samples, 0.24%)</title><rect x="567.6" y="253" width="2.8" height="15.0" fill="rgb(175,175,50)" rx="2" ry="2" />
+<text  x="570.61" y="263.5" ></text>
+</g>
+<g >
+<title>libsystem_platform.dylib`DYLD-STUB$$_platform_memmove (1 samples, 0.24%)</title><rect x="488.8" y="285" width="2.8" height="15.0" fill="rgb(178,178,51)" rx="2" ry="2" />
+<text  x="491.76" y="295.5" ></text>
+</g>
+<g >
+<title>libsystem_kernel.dylib`__getrlimit (3 samples, 0.72%)</title><rect x="697.2" y="93" width="8.4" height="15.0" fill="rgb(206,206,61)" rx="2" ry="2" />
+<text  x="700.16" y="103.5" ></text>
+</g>
+<g >
+<title>libcrypto.3.dylib`bio_read_intern (24 samples, 5.73%)</title><rect x="598.6" y="141" width="67.6" height="15.0" fill="rgb(193,193,56)" rx="2" ry="2" />
+<text  x="601.59" y="151.5" >libcryp..</text>
+</g>
+<g >
+<title>libsystem_c.dylib`clock_gettime (1 samples, 0.24%)</title><rect x="1125.2" y="301" width="2.8" height="15.0" fill="rgb(195,195,57)" rx="2" ry="2" />
+<text  x="1128.23" y="311.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`cf_socket_conn_is_alive (4 samples, 0.95%)</title><rect x="173.3" y="269" width="11.3" height="15.0" fill="rgb(198,198,58)" rx="2" ry="2" />
+<text  x="176.34" y="279.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`alloc_addbyter (1 samples, 0.24%)</title><rect x="263.5" y="285" width="2.8" height="15.0" fill="rgb(196,196,57)" rx="2" ry="2" />
+<text  x="266.46" y="295.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`multi_runsingle (342 samples, 81.62%)</title><rect x="164.9" y="381" width="963.1" height="15.0" fill="rgb(212,212,63)" rx="2" ry="2" />
+<text  x="167.89" y="391.5" >libcurl.4.dylib`multi_runsingle</text>
+</g>
+<g >
+<title>libcurl.4.dylib`cw_pause_write (92 samples, 21.96%)</title><rect x="688.7" y="221" width="259.1" height="15.0" fill="rgb(187,187,54)" rx="2" ry="2" />
+<text  x="691.71" y="231.5" >libcurl.4.dylib`cw_pause_write</text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_vsetopt (1 samples, 0.24%)</title><rect x="46.6" y="317" width="2.8" height="15.0" fill="rgb(229,229,69)" rx="2" ry="2" />
+<text  x="49.61" y="327.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`cw_download_write (1 samples, 0.24%)</title><rect x="956.3" y="189" width="2.8" height="15.0" fill="rgb(210,210,63)" rx="2" ry="2" />
+<text  x="959.25" y="199.5" ></text>
+</g>
+<g >
+<title>libsystem_platform.dylib`DYLD-STUB$$_platform_bzero (1 samples, 0.24%)</title><rect x="156.4" y="381" width="2.9" height="15.0" fill="rgb(199,199,58)" rx="2" ry="2" />
+<text  x="159.44" y="391.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`h2_progress_ingress (176 samples, 42.00%)</title><rect x="559.2" y="333" width="495.6" height="15.0" fill="rgb(191,191,55)" rx="2" ry="2" />
+<text  x="562.16" y="343.5" >libcurl.4.dylib`h2_progress_ingress</text>
+</g>
+<g >
+<title>libcurl.4.dylib`curl_mvaprintf (2 samples, 0.48%)</title><rect x="226.8" y="317" width="5.7" height="15.0" fill="rgb(218,218,65)" rx="2" ry="2" />
+<text  x="229.85" y="327.5" ></text>
+</g>
+<g >
+<title>libsystem_c.dylib`clock_gettime (1 samples, 0.24%)</title><rect x="1128.0" y="381" width="2.9" height="15.0" fill="rgb(195,195,57)" rx="2" ry="2" />
+<text  x="1131.04" y="391.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_req_start (1 samples, 0.24%)</title><rect x="207.1" y="333" width="2.9" height="15.0" fill="rgb(185,185,53)" rx="2" ry="2" />
+<text  x="210.14" y="343.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`tiny_malloc_should_clear (1 samples, 0.24%)</title><rect x="438.1" y="253" width="2.8" height="15.0" fill="rgb(228,228,69)" rx="2" ry="2" />
+<text  x="441.07" y="263.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curlx_now (1 samples, 0.24%)</title><rect x="1125.2" y="317" width="2.8" height="15.0" fill="rgb(195,195,57)" rx="2" ry="2" />
+<text  x="1128.23" y="327.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`cw_out_ptr_flush (1 samples, 0.24%)</title><rect x="956.3" y="141" width="2.8" height="15.0" fill="rgb(202,202,60)" rx="2" ry="2" />
+<text  x="959.25" y="151.5" ></text>
+</g>
+<g >
+<title>curl`get_terminal_columns (3 samples, 0.72%)</title><rect x="18.4" y="333" width="8.5" height="15.0" fill="rgb(220,220,66)" rx="2" ry="2" />
+<text  x="21.45" y="343.5" ></text>
+</g>
+<g >
+<title>libsystem_platform.dylib`DYLD-STUB$$_platform_memset (1 samples, 0.24%)</title><rect x="435.3" y="221" width="2.8" height="15.0" fill="rgb(223,223,67)" rx="2" ry="2" />
+<text  x="438.25" y="231.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_conn_ev_data_done (2 samples, 0.48%)</title><rect x="1119.6" y="349" width="5.6" height="15.0" fill="rgb(217,217,65)" rx="2" ry="2" />
+<text  x="1122.59" y="359.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`formatf (3 samples, 0.72%)</title><rect x="88.9" y="333" width="8.4" height="15.0" fill="rgb(209,209,62)" rx="2" ry="2" />
+<text  x="91.85" y="343.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_close (5 samples, 1.19%)</title><rect x="97.3" y="365" width="14.1" height="15.0" fill="rgb(226,226,68)" rx="2" ry="2" />
+<text  x="100.30" y="375.5" ></text>
+</g>
+<g >
+<title>libsystem_pthread.dylib`_pthread_exit_if_canceled (2 samples, 0.48%)</title><rect x="601.4" y="77" width="5.6" height="15.0" fill="rgb(212,212,63)" rx="2" ry="2" />
+<text  x="604.41" y="87.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`on_data_chunk_recv (93 samples, 22.20%)</title><rect x="688.7" y="285" width="261.9" height="15.0" fill="rgb(181,181,52)" rx="2" ry="2" />
+<text  x="691.71" y="295.5" >libcurl.4.dylib`on_data_chunk_recv</text>
+</g>
+<g >
+<title>libcurl.4.dylib`setup_connection_internals (2 samples, 0.48%)</title><rect x="263.5" y="349" width="5.6" height="15.0" fill="rgb(177,177,50)" rx="2" ry="2" />
+<text  x="266.46" y="359.5" ></text>
+</g>
+<g >
+<title>libnghttp2.14.dylib`nghttp2_session_consume (1 samples, 0.24%)</title><rect x="947.8" y="269" width="2.8" height="15.0" fill="rgb(200,200,59)" rx="2" ry="2" />
+<text  x="950.80" y="279.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`alloc_addbyter (3 samples, 0.72%)</title><rect x="466.2" y="301" width="8.5" height="15.0" fill="rgb(196,196,57)" rx="2" ry="2" />
+<text  x="469.23" y="311.5" ></text>
+</g>
+<g >
+<title>libsystem_platform.dylib`_platform_strlen (1 samples, 0.24%)</title><rect x="229.7" y="285" width="2.8" height="15.0" fill="rgb(190,190,55)" rx="2" ry="2" />
+<text  x="232.67" y="295.5" ></text>
+</g>
+<g >
+<title>libssl.3.dylib`tls_get_max_records_default (1 samples, 0.24%)</title><rect x="308.5" y="157" width="2.8" height="15.0" fill="rgb(186,186,54)" rx="2" ry="2" />
+<text  x="311.52" y="167.5" ></text>
+</g>
+<g >
+<title>libssl.3.dylib`ssl3_read_bytes (32 samples, 7.64%)</title><rect x="576.1" y="221" width="90.1" height="15.0" fill="rgb(201,201,59)" rx="2" ry="2" />
+<text  x="579.06" y="231.5" >libssl.3.d..</text>
+</g>
+<g >
+<title>libcurl.4.dylib`curl_maprintf (1 samples, 0.24%)</title><rect x="55.1" y="301" width="2.8" height="15.0" fill="rgb(177,177,50)" rx="2" ry="2" />
+<text  x="58.06" y="311.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`formatf (2 samples, 0.48%)</title><rect x="232.5" y="317" width="5.6" height="15.0" fill="rgb(209,209,62)" rx="2" ry="2" />
+<text  x="235.48" y="327.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`nanov2_malloc_type (1 samples, 0.24%)</title><rect x="950.6" y="205" width="2.8" height="15.0" fill="rgb(184,184,53)" rx="2" ry="2" />
+<text  x="953.62" y="215.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`szone_malloc_should_clear (1 samples, 0.24%)</title><rect x="438.1" y="269" width="2.8" height="15.0" fill="rgb(182,182,52)" rx="2" ry="2" />
+<text  x="441.07" y="279.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_hash_add2 (2 samples, 0.48%)</title><rect x="502.8" y="333" width="5.7" height="15.0" fill="rgb(206,206,61)" rx="2" ry="2" />
+<text  x="505.84" y="343.5" ></text>
+</g>
+<g >
+<title>libnghttp2.14.dylib`emit_indname_block (1 samples, 0.24%)</title><rect x="429.6" y="205" width="2.8" height="15.0" fill="rgb(212,212,63)" rx="2" ry="2" />
+<text  x="432.62" y="215.5" ></text>
+</g>
+<g >
+<title>libsystem_kernel.dylib`__write_nocancel (3 samples, 0.72%)</title><rect x="128.3" y="349" width="8.4" height="15.0" fill="rgb(227,227,68)" rx="2" ry="2" />
+<text  x="131.28" y="359.5" ></text>
+</g>
+<g >
+<title>libcrypto.3.dylib`bread_conv (24 samples, 5.73%)</title><rect x="598.6" y="125" width="67.6" height="15.0" fill="rgb(212,212,63)" rx="2" ry="2" />
+<text  x="601.59" y="135.5" >libcryp..</text>
+</g>
+<g >
+<title>libcurl.4.dylib`on_frame_recv (3 samples, 0.72%)</title><rect x="950.6" y="285" width="8.5" height="15.0" fill="rgb(184,184,53)" rx="2" ry="2" />
+<text  x="953.62" y="295.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_http_req_to_h2 (1 samples, 0.24%)</title><rect x="294.4" y="285" width="2.9" height="15.0" fill="rgb(209,209,62)" rx="2" ry="2" />
+<text  x="297.44" y="295.5" ></text>
+</g>
+<g >
+<title>libnghttp2.14.dylib`nghttp2_session_mem_send_internal (4 samples, 0.95%)</title><rect x="426.8" y="253" width="11.3" height="15.0" fill="rgb(222,222,67)" rx="2" ry="2" />
+<text  x="429.80" y="263.5" ></text>
+</g>
+<g >
+<title>curl`tool_setopt_long (1 samples, 0.24%)</title><rect x="12.8" y="333" width="2.8" height="15.0" fill="rgb(202,202,60)" rx="2" ry="2" />
+<text  x="15.82" y="343.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`_free (1 samples, 0.24%)</title><rect x="415.5" y="109" width="2.9" height="15.0" fill="rgb(188,188,54)" rx="2" ry="2" />
+<text  x="418.54" y="119.5" ></text>
+</g>
+<g >
+<title>libnghttp2.14.dylib`nghttp2_downcase (1 samples, 0.24%)</title><rect x="446.5" y="237" width="2.8" height="15.0" fill="rgb(221,221,66)" rx="2" ry="2" />
+<text  x="449.52" y="247.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`cr_null_total_length (1 samples, 0.24%)</title><rect x="494.4" y="333" width="2.8" height="15.0" fill="rgb(193,193,56)" rx="2" ry="2" />
+<text  x="497.39" y="343.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`cw_out_do_write (1 samples, 0.24%)</title><rect x="956.3" y="157" width="2.8" height="15.0" fill="rgb(189,189,55)" rx="2" ry="2" />
+<text  x="959.25" y="167.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`_realloc (1 samples, 0.24%)</title><rect x="266.3" y="237" width="2.8" height="15.0" fill="rgb(224,224,67)" rx="2" ry="2" />
+<text  x="269.28" y="247.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`formatf (2 samples, 0.48%)</title><rect x="226.8" y="301" width="5.7" height="15.0" fill="rgb(209,209,62)" rx="2" ry="2" />
+<text  x="229.85" y="311.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`_malloc_zone_malloc (1 samples, 0.24%)</title><rect x="590.1" y="141" width="2.9" height="15.0" fill="rgb(176,176,50)" rx="2" ry="2" />
+<text  x="593.14" y="151.5" ></text>
+</g>
+<g >
+<title>libsystem_pthread.dylib`___chkstk_darwin (1 samples, 0.24%)</title><rect x="238.1" y="317" width="2.8" height="15.0" fill="rgb(224,224,67)" rx="2" ry="2" />
+<text  x="241.11" y="327.5" ></text>
+</g>
+<g >
+<title>libsystem_c.dylib`fopen (72 samples, 17.18%)</title><rect x="694.3" y="125" width="202.8" height="15.0" fill="rgb(182,182,52)" rx="2" ry="2" />
+<text  x="697.34" y="135.5" >libsystem_c.dylib`fopen</text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_add_custom_headers (1 samples, 0.24%)</title><rect x="274.7" y="349" width="2.8" height="15.0" fill="rgb(189,189,55)" rx="2" ry="2" />
+<text  x="277.73" y="359.5" ></text>
+</g>
+<g >
+<title>libsystem_kernel.dylib`__recvfrom (21 samples, 5.01%)</title><rect x="607.0" y="93" width="59.2" height="15.0" fill="rgb(211,211,63)" rx="2" ry="2" />
+<text  x="610.04" y="103.5" >libsys..</text>
+</g>
+<g >
+<title>libnghttp2.14.dylib`nghttp2_session_send (4 samples, 0.95%)</title><rect x="426.8" y="269" width="11.3" height="15.0" fill="rgb(223,223,67)" rx="2" ry="2" />
+<text  x="429.80" y="279.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_creader_set_null (1 samples, 0.24%)</title><rect x="491.6" y="333" width="2.8" height="15.0" fill="rgb(200,200,59)" rx="2" ry="2" />
+<text  x="494.58" y="343.5" ></text>
+</g>
+<g >
+<title>libsystem_c.dylib`__smakebuf (11 samples, 2.63%)</title><rect x="897.1" y="93" width="31.0" height="15.0" fill="rgb(204,204,60)" rx="2" ry="2" />
+<text  x="900.11" y="103.5" >li..</text>
+</g>
+<g >
+<title>libssl.3.dylib`tls_read_record (30 samples, 7.16%)</title><rect x="581.7" y="205" width="84.5" height="15.0" fill="rgb(206,206,61)" rx="2" ry="2" />
+<text  x="584.69" y="215.5" >libssl.3...</text>
+</g>
+<g >
+<title>libsystem_c.dylib`funlockfile (1 samples, 0.24%)</title><rect x="945.0" y="125" width="2.8" height="15.0" fill="rgb(187,187,54)" rx="2" ry="2" />
+<text  x="947.99" y="135.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_cf_def_recv (1 samples, 0.24%)</title><rect x="167.7" y="365" width="2.8" height="15.0" fill="rgb(200,200,59)" rx="2" ry="2" />
+<text  x="170.71" y="375.5" ></text>
+</g>
+<g >
+<title>libnghttp2.14.dylib`nghttp2_session_on_data_received (1 samples, 0.24%)</title><rect x="1049.2" y="285" width="2.8" height="15.0" fill="rgb(199,199,58)" rx="2" ry="2" />
+<text  x="1052.19" y="295.5" ></text>
+</g>
+<g >
+<title>libnghttp2.14.dylib`session_after_frame_sent2 (2 samples, 0.48%)</title><rect x="432.4" y="237" width="5.7" height="15.0" fill="rgb(223,223,67)" rx="2" ry="2" />
+<text  x="435.43" y="247.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`h2_progress_egress (50 samples, 11.93%)</title><rect x="297.3" y="285" width="140.8" height="15.0" fill="rgb(176,176,50)" rx="2" ry="2" />
+<text  x="300.26" y="295.5" >libcurl.4.dylib`h..</text>
+</g>
+<g >
+<title>libcurl.4.dylib`free_primary_ssl_config (1 samples, 0.24%)</title><rect x="195.9" y="317" width="2.8" height="15.0" fill="rgb(176,176,50)" rx="2" ry="2" />
+<text  x="198.87" y="327.5" ></text>
+</g>
+<g >
+<title>libssl.3.dylib`SSL_read (1 samples, 0.24%)</title><rect x="669.0" y="269" width="2.8" height="15.0" fill="rgb(226,226,68)" rx="2" ry="2" />
+<text  x="672.00" y="279.5" ></text>
+</g>
+<g >
+<title>all (419 samples, 100%)</title><rect x="10.0" y="477" width="1180.0" height="15.0" fill="rgb(184,184,53)" rx="2" ry="2" />
+<text  x="13.00" y="487.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`&lt;deduplicated_symbol&gt; (1 samples, 0.24%)</title><rect x="1156.2" y="381" width="2.8" height="15.0" fill="rgb(220,220,66)" rx="2" ry="2" />
+<text  x="1159.21" y="391.5" ></text>
+</g>
+<g >
+<title>libsystem_kernel.dylib`__ioctl (3 samples, 0.72%)</title><rect x="902.7" y="61" width="8.5" height="15.0" fill="rgb(184,184,53)" rx="2" ry="2" />
+<text  x="905.74" y="71.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`cf_h2_send (62 samples, 14.80%)</title><rect x="280.4" y="301" width="174.6" height="15.0" fill="rgb(186,186,54)" rx="2" ry="2" />
+<text  x="283.36" y="311.5" >libcurl.4.dylib`cf_h2_..</text>
+</g>
+<g >
+<title>libcrypto.3.dylib`BIO_read (25 samples, 5.97%)</title><rect x="595.8" y="157" width="70.4" height="15.0" fill="rgb(216,216,65)" rx="2" ry="2" />
+<text  x="598.78" y="167.5" >libcryp..</text>
+</g>
+<g >
+<title>libsystem_kernel.dylib`__close_nocancel (2 samples, 0.48%)</title><rect x="150.8" y="381" width="5.6" height="15.0" fill="rgb(211,211,63)" rx="2" ry="2" />
+<text  x="153.81" y="391.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curl_getenv (2 samples, 0.48%)</title><rect x="215.6" y="349" width="5.6" height="15.0" fill="rgb(227,227,68)" rx="2" ry="2" />
+<text  x="218.58" y="359.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`nanov2_malloc_type (1 samples, 0.24%)</title><rect x="260.6" y="317" width="2.9" height="15.0" fill="rgb(184,184,53)" rx="2" ry="2" />
+<text  x="263.64" y="327.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_freeset (1 samples, 0.24%)</title><rect x="100.1" y="349" width="2.8" height="15.0" fill="rgb(176,176,50)" rx="2" ry="2" />
+<text  x="103.12" y="359.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_bufq_sipn (40 samples, 9.55%)</title><rect x="559.2" y="317" width="112.6" height="15.0" fill="rgb(229,229,69)" rx="2" ry="2" />
+<text  x="562.16" y="327.5" >libcurl.4.dyl..</text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`mvm_madvise_free (5 samples, 1.19%)</title><rect x="136.7" y="349" width="14.1" height="15.0" fill="rgb(191,191,56)" rx="2" ry="2" />
+<text  x="139.73" y="359.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_poll (1 samples, 0.24%)</title><rect x="1057.6" y="301" width="2.9" height="15.0" fill="rgb(186,186,54)" rx="2" ry="2" />
+<text  x="1060.64" y="311.5" ></text>
+</g>
+<g >
+<title>curl`http_setopts (1 samples, 0.24%)</title><rect x="12.8" y="349" width="2.8" height="15.0" fill="rgb(201,201,59)" rx="2" ry="2" />
+<text  x="15.82" y="359.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`cf_h2_cntrl (1 samples, 0.24%)</title><rect x="1122.4" y="333" width="2.8" height="15.0" fill="rgb(206,206,61)" rx="2" ry="2" />
+<text  x="1125.41" y="343.5" ></text>
+</g>
+<g >
+<title>libcrypto.3.dylib`ossl_err_get_state_int (1 samples, 0.24%)</title><rect x="302.9" y="189" width="2.8" height="15.0" fill="rgb(191,191,55)" rx="2" ry="2" />
+<text  x="305.89" y="199.5" ></text>
+</g>
+<g >
+<title>libcrypto.3.dylib`aesni_encrypt (1 samples, 0.24%)</title><rect x="587.3" y="93" width="2.8" height="15.0" fill="rgb(178,178,51)" rx="2" ry="2" />
+<text  x="590.33" y="103.5" ></text>
+</g>
+<g >
+<title>curl`tcp_setopts (1 samples, 0.24%)</title><rect x="29.7" y="349" width="2.8" height="15.0" fill="rgb(180,180,52)" rx="2" ry="2" />
+<text  x="32.71" y="359.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_conn_seems_dead (4 samples, 0.95%)</title><rect x="173.3" y="301" width="11.3" height="15.0" fill="rgb(203,203,60)" rx="2" ry="2" />
+<text  x="176.34" y="311.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`Curl_pgrsUpdate (1 samples, 0.24%)</title><rect x="1125.2" y="333" width="2.8" height="15.0" fill="rgb(209,209,62)" rx="2" ry="2" />
+<text  x="1128.23" y="343.5" ></text>
+</g>
+<g >
+<title>libsystem_kernel.dylib`madvise (5 samples, 1.19%)</title><rect x="136.7" y="317" width="14.1" height="15.0" fill="rgb(180,180,52)" rx="2" ry="2" />
+<text  x="139.73" y="327.5" ></text>
+</g>
+<g >
+<title>libsystem_malloc.dylib`nanov2_calloc_type (1 samples, 0.24%)</title><rect x="511.3" y="317" width="2.8" height="15.0" fill="rgb(200,200,59)" rx="2" ry="2" />
+<text  x="514.29" y="327.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`curl_maprintf (6 samples, 1.43%)</title><rect x="457.8" y="349" width="16.9" height="15.0" fill="rgb(177,177,50)" rx="2" ry="2" />
+<text  x="460.78" y="359.5" ></text>
+</g>
+<g >
+<title>libcurl.4.dylib`cw_out_ptr_flush (90 samples, 21.48%)</title><rect x="694.3" y="173" width="253.5" height="15.0" fill="rgb(202,202,60)" rx="2" ry="2" />
+<text  x="697.34" y="183.5" >libcurl.4.dylib`cw_out_ptr_flush</text>
+</g>
+<g >
+<title>libcurl.4.dylib`ssl_cf_recv (38 samples, 9.07%)</title><rect x="564.8" y="285" width="107.0" height="15.0" fill="rgb(211,211,63)" rx="2" ry="2" />
+<text  x="567.80" y="295.5" >libcurl.4.dyl..</text>
+</g>
+<g >
+<title>libcurl.4.dylib`formatf (1 samples, 0.24%)</title><rect x="63.5" y="333" width="2.8" height="15.0" fill="rgb(209,209,62)" rx="2" ry="2" />
+<text  x="66.51" y="343.5" ></text>
+</g>
+<g >
+<title>libcrypto.3.dylib`EVP_CIPHER_CTX_ctrl (1 samples, 0.24%)</title><rect x="401.5" y="109" width="2.8" height="15.0" fill="rgb(212,212,63)" rx="2" ry="2" />
+<text  x="404.46" y="119.5" ></text>
+</g>
+<g >
+<title>libsystem_kernel.dylib`__error (1 samples, 0.24%)</title><rect x="94.5" y="269" width="2.8" height="15.0" fill="rgb(187,187,54)" rx="2" ry="2" />
+<text  x="97.49" y="279.5" ></text>
+</g>
+</g>
+</svg>
