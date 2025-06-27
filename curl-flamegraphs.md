@@ -17,6 +17,6 @@ So, how does it look and what is there to see?
 
 Here, curl made 50000 requests to a localhost Apache, using HTTP/2 to retrieve a ~10KB resource.
 
-[![Curl Request Flame Graph](./images/curl.req.flames.svg)](https://raw.githubusercontent.com/icing/blog/refs/heads/main/images/curl.req.flames.svg)
+![Curl Request Flame Graph](./images/curl.req.flames.svg)
 
 
