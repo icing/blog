@@ -2,6 +2,7 @@
 
 Short things to share:
 
+* [curl platform performance](curl-platform-perf.md)
 * [curl request performance](curl-req-perf.md)
 * [curl Flame Graphs](curl-flamegraphs.md)
 * [Apache ACME Profiles](apache-acme-profiles.md)
