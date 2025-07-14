@@ -4,7 +4,7 @@ Let's talk a bit about
 [CVE-2025-53020](https://www.cve.org/CVERecord?id=CVE-2025-53020),
 a moderate security vulnerability in Apache httpd that was fixed with
 the recent release 2.4.64. It was found by security researcher
-Gal Bar Nahum and reported to the project on June 18th 20205.
+Gal Bar Nahum and reported to the project on June 18th 2025.
 
 Gal did real real research, understanding the protocol, reading our code
 and spotting where a client could pierce through our defenses. What
