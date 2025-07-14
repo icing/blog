@@ -60,7 +60,7 @@ in place for ages to protect against misbehaving clients:
 
 These are obeyed by its HTTP/1.x and also by the HTTP/2 implementation. However,
 the HTTP/2 implementation had an unintended weakness which Gal discovered: *it
-does counts duplicate, empty headers as a single header*.
+counts duplicate, empty headers as a single header*.
 
 The reason for that was that in HTTP, those are the same. Consider a HTTP/1.1
 request like
@@ -81,7 +81,7 @@ aaaa: 1, 1, 2
 ```
 and that's exactly what HTTP/2 does when it converts an incoming request into the internal representation.
 
-Now, if a clients sends such headers with values, the concatenated values will just get longer
+Now, if a client sends such headers with values, the concatenated values will just get longer
 and eventually hit `LimitRequestFieldsize`. The request would be denied, the resources freed. 
 
 But sending *empty* headers, the concatenated field would not grow in length. So, Gal's PoC could
