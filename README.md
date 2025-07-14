@@ -2,6 +2,7 @@
 
 Short things to share:
 
+* [HPACK Bombing Apache](hapck-bombing-apache.md)
 * [curl platform performance](curl-platform-perf.md)
 * [curl request performance](curl-req-perf.md)
 * [curl Flame Graphs](curl-flamegraphs.md)
